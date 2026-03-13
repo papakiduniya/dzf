@@ -1022,20 +1022,53 @@
    § 7  PORTRAIT-SPECIFIC GAME RULES
    ══════════════════════════════════════════════════════════════ */
 
-/* Tetris: stack panels vertically on portrait phones */
-@media (max-width: 640px) and (orientation: portrait) {
+/* Tetris: fix side-by-side overflow on portrait phones */
+@media (max-width: 640px) {
 
+  /* Allow vertical scroll so both boards are reachable */
   #tetris-play {
-    flex-direction: column;
-    align-items: center;
-    padding: 6px 4px;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 0 8px 16px !important;
   }
 
-  #tetris-player-1,
-  #tetris-player-2 {
+  /* Stack the two player boards vertically */
+  #tetris-boards-row {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 20px !important;
     width: 100% !important;
-    max-width: 220px;
-    margin: 0 auto;
+  }
+
+  /* Each board column: full width, centered */
+  #tetris-p1-col,
+  #tetris-p2-col {
+    width: 100% !important;
+    align-items: center !important;
+  }
+
+  /* Scale canvases to fit screen — keeps JS-set resolution, shrinks display */
+  #tetris-canvas-p1,
+  #tetris-canvas-p2 {
+    max-width: calc(100vw - 32px) !important;
+    height: auto !important;
+  }
+
+  /* Next-piece preview canvases */
+  #tetris-next-p1,
+  #tetris-next-p2 {
+    max-width: 80px !important;
+    height: auto !important;
+  }
+
+  /* Show the mobile touch controls strip */
+  #tetris-mobile-controls {
+    display: block !important;
+  }
+
+  /* Hide keyboard hint text on mobile (buttons replace it) */
+  #tetris-p2-keys {
+    display: none !important;
   }
 
 }

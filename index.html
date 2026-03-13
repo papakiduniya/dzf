@@ -3604,9 +3604,9 @@
         <h1 style="margin:0;font-family:'Orbitron',sans-serif;font-size:1.15rem;font-weight:900;letter-spacing:0.13em;background:linear-gradient(90deg,#00e5ff,#0088ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:inline-block;">🧱 TETRIS DUEL</h1>
       </div>
 
-      <div style="display:flex;gap:16px;justify-content:center;align-items:flex-start;flex-wrap:wrap;">
+      <div id="tetris-boards-row" style="display:flex;gap:16px;justify-content:center;align-items:flex-start;flex-wrap:wrap;">
         <!-- P1 -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div id="tetris-p1-col" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
           <div style="color:#00e5ff;font-weight:700;letter-spacing:0.1em;">🔵 PLAYER 1</div>
           <div style="display:flex;gap:6px;font-size:0.75rem;color:rgba(255,255,255,0.5);">
             <span>Score: <b id="tetris-score-p1" style="color:#fff;">0</b></span>
@@ -3618,7 +3618,7 @@
           <canvas id="tetris-next-p1" style="border:1px solid rgba(255,255,255,0.1);border-radius:4px;"></canvas>
         </div>
         <!-- P2 -->
-        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <div id="tetris-p2-col" style="display:flex;flex-direction:column;align-items:center;gap:6px;">
           <div id="tetris-p2-label" style="color:#f50057;font-weight:700;letter-spacing:0.1em;">🔴 PLAYER 2</div>
           <div style="display:flex;gap:6px;font-size:0.75rem;color:rgba(255,255,255,0.5);">
             <span>Score: <b id="tetris-score-p2" style="color:#fff;">0</b></span>
@@ -3631,6 +3631,38 @@
           <div id="tetris-p2-keys" style="font-size:0.65rem;color:rgba(255,255,255,0.25);text-align:center;line-height:1.6;">W=Rotate · A/D=Move<br>S=Down · Q=Drop</div>
         </div>
       </div>
+      <!-- Mobile touch controls (hidden on desktop, shown on touch devices) -->
+      <div id="tetris-mobile-controls" style="display:none;width:100%;max-width:560px;margin:8px auto 0;box-sizing:border-box;">
+        <!-- P1 controls (left side) -->
+        <div style="display:flex;gap:8px;justify-content:space-between;padding:0 8px;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <span style="font-size:0.65rem;color:rgba(0,229,255,0.5);letter-spacing:0.06em;font-family:'Rajdhani',sans-serif;">P1</span>
+            <div style="display:flex;gap:6px;">
+              <button class="dz-dpad-btn" id="t-p1-left"  ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(1,'left')"  style="background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">◀</button>
+              <button class="dz-dpad-btn" id="t-p1-down"  ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(1,'down')"  style="background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">▼</button>
+              <button class="dz-dpad-btn" id="t-p1-right" ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(1,'right')" style="background:rgba(0,229,255,0.12);border:1px solid rgba(0,229,255,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">▶</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="dz-action-btn" id="t-p1-rotate" ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(1,'rotate')" style="background:rgba(0,229,255,0.18);border:1px solid rgba(0,229,255,0.35);color:#00e5ff;border-radius:8px;font-size:0.72rem;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:0.04em;">↻ ROT</button>
+              <button class="dz-action-btn" id="t-p1-drop"   ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(1,'drop')"   style="background:rgba(0,229,255,0.18);border:1px solid rgba(0,229,255,0.35);color:#00e5ff;border-radius:8px;font-size:0.72rem;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:0.04em;">⬇ DROP</button>
+            </div>
+          </div>
+          <!-- P2 controls (right side) -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <span style="font-size:0.65rem;color:rgba(245,0,87,0.5);letter-spacing:0.06em;font-family:'Rajdhani',sans-serif;">P2</span>
+            <div style="display:flex;gap:6px;">
+              <button class="dz-dpad-btn" id="t-p2-left"  ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(2,'left')"  style="background:rgba(245,0,87,0.12);border:1px solid rgba(245,0,87,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">◀</button>
+              <button class="dz-dpad-btn" id="t-p2-down"  ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(2,'down')"  style="background:rgba(245,0,87,0.12);border:1px solid rgba(245,0,87,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">▼</button>
+              <button class="dz-dpad-btn" id="t-p2-right" ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(2,'right')" style="background:rgba(245,0,87,0.12);border:1px solid rgba(245,0,87,0.25);color:#fff;border-radius:8px;font-size:1.2rem;">▶</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="dz-action-btn" id="t-p2-rotate" ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(2,'rotate')" style="background:rgba(245,0,87,0.18);border:1px solid rgba(245,0,87,0.35);color:#f50057;border-radius:8px;font-size:0.72rem;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:0.04em;">↻ ROT</button>
+              <button class="dz-action-btn" id="t-p2-drop"   ontouchstart="window.tetrisMobileKey&&window.tetrisMobileKey(2,'drop')"   style="background:rgba(245,0,87,0.18);border:1px solid rgba(245,0,87,0.35);color:#f50057;border-radius:8px;font-size:0.72rem;font-family:'Rajdhani',sans-serif;font-weight:700;letter-spacing:0.04em;">⬇ DROP</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="tetris-result" class="hidden" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.88);z-index:99;">
         <div style="background:#0d0f1c;border:2px solid #00e5ff;border-radius:16px;padding:40px 48px;text-align:center;max-width:360px;">
           <div id="tetris-result-title" style="font-size:1.7rem;font-weight:900;color:#fff;font-family:'Orbitron',sans-serif;margin-bottom:8px;"></div>
