@@ -248,20 +248,6 @@
   z-index: 200;
 }
 
-/* ── Rotate prompt polish + animation ────────────────────────── */
-#dz-rotate-prompt {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-@keyframes dzSpin {
-  0%   { transform: rotate(0deg); }
-  15%  { transform: rotate(-25deg); }
-  50%  { transform: rotate(25deg); }
-  85%  { transform: rotate(-15deg); }
-  100% { transform: rotate(0deg); }
-}
-
 
 /* ══════════════════════════════════════════════════════════════
    § 3  CORE MOBILE  (≤ 768px)
@@ -301,7 +287,9 @@
   /* ── Hub screen ──────────────────────────────────────────────── */
 
   #screen-hub {
-    padding: 36px 16px 32px;
+    /* BUG 1 FIX: was 36px — hamburger is top:14px + h:44px = 58px bottom edge;
+       +14px breathing gap = 72px minimum clearance needed */
+    padding: 72px 16px 32px;
     gap: 24px;
     overflow-x: hidden;
     width: 100%;
@@ -685,7 +673,8 @@
   /* ── Hub ──────────────────────────────────────────────────────── */
 
   #screen-hub {
-    padding: 24px 12px 24px;
+    /* BUG 2 FIX: was 24px — even worse than §3; hamburger still clips the header */
+    padding: 72px 12px 24px;
     gap: 16px;
   }
 
@@ -915,149 +904,138 @@
 /* end @media 360px */
 
 
+
+
 /* ══════════════════════════════════════════════════════════════
-   § 6  LANDSCAPE PHONE  (short viewport, wide orientation)
-        Targets: max-height 500px + landscape orientation
+   § 7  PORTRAIT PHONE GAME LAYOUTS
+        BUG 4+5 FIX: was only Tetris + Bomberman. All canvas-heavy
+        games now have proper portrait/vertical layout rules:
+        column flex wrappers, 100%-width canvases capped at ~56dvh,
+        and controls pinned below the canvas.
    ══════════════════════════════════════════════════════════════ */
 
-@media screen and (orientation: landscape) and (max-height: 500px) {
+@media (max-width: 768px) and (orientation: portrait) {
 
-  /* Topbar goes ultra compact */
-  #dz-universal-topbar {
-    padding: 4px 10px !important;
-    min-height: 40px !important;
+  /* ── All portrait canvases: full-width, proportional, height-capped ── */
+  #tanks-canvas,
+  #bm-canvas,
+  #sc-canvas,
+  #sd-canvas,
+  #pp-canvas,
+  #ping-canvas,
+  #territory-canvas,
+  #checkers-canvas,
+  #carrom-canvas,
+  #ludo-canvas {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    /* Cap canvas height so HUD + controls always stay on screen */
+    max-height: 56dvh !important;
+    display: block !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
   }
 
-  .dz-univ-back-btn,
-  .dz-univ-fs-btn {
-    min-height: 36px !important;
-    padding: 4px 12px !important;
-    font-size: 0.75rem;
-  }
-
-  #dz-universal-controls {
-    padding: 4px 8px 8px;
-  }
-
-  .dz-dpad-btn {
-    width: 42px;
-    height: 42px;
-    font-size: 1rem;
-  }
-
-  .dz-action-btn {
-    height: 42px;
-    font-size: 0.75rem;
-  }
-
-  .game-home-panel,
-  .ghp-v2 {
-    padding: 8px 12px 12px;
-    gap: 8px;
-  }
-
-  #screen-hub {
-    padding: 16px 12px;
-    gap: 12px;
-  }
-
-  /* Game play panels: remove vertical padding to maximize canvas */
+  /* ── Play panel wrappers: vertical column layout ── */
   #tanks-play-panel,
   #sd-play-panel,
   #sc-play-panel,
   #bm-play,
   #pp-wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    min-height: 100dvh !important;
+    width: 100% !important;
     padding: 0 !important;
-    min-height: 100dvh;
-    justify-content: flex-start;
+    box-sizing: border-box !important;
   }
 
-  /* HUDs: ultra compact */
+  /* ── HUDs: full-width compact strip above canvas ── */
   #tanks-hud,
   #sd-hud,
   #sc-hud {
-    padding: 3px 8px !important;
-    min-height: 28px;
+    width: 100% !important;
+    padding: 4px 8px !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+    min-height: 36px !important;
   }
 
-  /* HP bars: narrower */
-  #tanks-hud [style*="width:100px"],
-  #sd-p1-hp-bar,
-  #sd-p2-hp-bar {
-    width: 64px !important;
+  /* ── Controls: full-width row pinned below canvas ── */
+  #tanks-mobile-controls,
+  #bm-mobile-controls,
+  #sd-joystick-wrap,
+  #pp-mobile-controls,
+  #tetris-mobile-controls,
+  #snake-mobile-controls {
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    padding: 6px 4px 10px !important;
+    box-sizing: border-box !important;
   }
 
-  /* Canvas: max available height in landscape */
-  #tanks-canvas,
-  #sd-canvas,
-  #sc-canvas,
-  #bm-canvas,
-  #pp-canvas {
-    max-height: calc(100dvh - 72px);
-    width: auto !important;
-    max-width: 100%;
-    object-fit: contain;
-  }
-
-  /* Tetris: tighter padding */
+  /* ── Tetris: stack the two player panels vertically ── */
   #tetris-play {
-    padding: 4px 8px !important;
-  }
-
-  /* Tanks controls: compact row */
-  #tanks-mobile-controls {
-    padding: 4px 8px !important;
-    gap: 8px;
-  }
-
-  /* Bomberman canvas wrapper */
-  #bm-play > div:first-child {
-    padding: 4px 8px !important;
-  }
-
-}
-/* end landscape 500px */
-
-
-/* ══════════════════════════════════════════════════════════════
-   § 7  PORTRAIT-SPECIFIC GAME RULES
-   ══════════════════════════════════════════════════════════════ */
-
-/* Tetris: stack panels vertically on portrait phones */
-@media (max-width: 640px) and (orientation: portrait) {
-
-  #tetris-play {
-    flex-direction: column;
-    align-items: center;
-    padding: 6px 4px;
+    flex-direction: column !important;
+    align-items: center !important;
+    padding: 6px 4px !important;
   }
 
   #tetris-player-1,
   #tetris-player-2 {
     width: 100% !important;
-    max-width: 220px;
-    margin: 0 auto;
+    max-width: 220px !important;
+    margin: 0 auto !important;
   }
 
-}
-
-/* Bomberman: canvas centered with breathing room */
-@media (max-width: 560px) {
-
+  /* ── Bomberman: centered canvas ── */
   #bm-canvas {
-    display: block;
-    margin: 0 auto;
+    display: block !important;
+    margin: 0 auto !important;
   }
 
-  #bm-play {
-    padding: 6px 4px !important;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-height: 100dvh;
+  /* ── PingPong: canvas fills width, caps height ── */
+  #pp-canvas-wrap {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  #pp-canvas {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 50dvh !important;
+  }
+
+  /* ── StarCatcher: no wasted top padding ── */
+  #sc-play-panel {
+    padding: 0 !important;
+  }
+
+  /* ── Checkers: column stack in portrait ── */
+  #ck-game-area {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+
+  /* ── Battleship: stack placement + attack grids vertically ── */
+  #bs-game-area,
+  .bs-grids-row {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  #bs-placement-grid,
+  #bs-attack-grid {
+    max-width: min(90vw, 340px) !important;
+    margin: 0 auto !important;
   }
 
 }
+
 
 
 /* ══════════════════════════════════════════════════════════════
@@ -1090,8 +1068,12 @@
       right: calc(14px + env(safe-area-inset-right)) !important;
     }
 
-    /* Hub screen bottom padding accounts for home indicator */
+    /* Hub screen accounts for home indicator + notch */
     #screen-hub {
+      /* BUG 3 FIX: safe-area block only fixed padding-bottom; on notch phones the
+         hamburger shifts down by env(safe-area-inset-top) so hub needs the same
+         extra offset on top to keep content clear of both notch and hamburger */
+      padding-top: calc(72px + env(safe-area-inset-top));
       padding-bottom: calc(32px + env(safe-area-inset-bottom));
     }
 

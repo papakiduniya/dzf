@@ -188,9 +188,6 @@
 
     updateFSBtn();
     window.scrollTo(0, 0);
-
-    // Show landscape prompt for wide-canvas games
-    checkLandscapePrompt(screenId);
   }
 
   // ── Hide wrapper ──────────────────────────────────────────────
@@ -316,67 +313,6 @@
     });
   }
 
-  // ── Landscape rotate prompt ───────────────────────────────────
-  // Wide-canvas games that need landscape to play properly
-  var LANDSCAPE_GAMES = {
-    'screen-tanks':       true,
-    'screen-spacedodge':  true,
-    'screen-starcatcher': true,
-    'screen-bomberman':   true,
-    'screen-tetris':      true,
-    'screen-pingpong':    true,
-    'screen-checkers':    true,
-    'screen-territory':   true,
-    'screen-battleship':  true,
-  };
-
-  var _rotateOverlay = null;
-
-  function createRotateOverlay() {
-    if (_rotateOverlay) return _rotateOverlay;
-    var ov = document.createElement('div');
-    ov.id = 'dz-rotate-prompt';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;display:none;flex-direction:column;'
-      + 'align-items:center;justify-content:center;background:rgba(7,8,15,0.97);'
-      + 'font-family:Orbitron,sans-serif;color:#fff;text-align:center;padding:32px;gap:20px;';
-    ov.innerHTML =
-      '<div style="font-size:56px;animation:dzSpin 2.4s ease-in-out infinite;">📱</div>'
-      + '<div style="font-size:0.9rem;font-weight:700;letter-spacing:0.14em;color:#00e5ff;">ROTATE DEVICE</div>'
-      + '<div style="font-size:0.72rem;color:rgba(255,255,255,0.55);letter-spacing:0.04em;'
-      + 'max-width:260px;line-height:1.7;font-family:Rajdhani,sans-serif;">'
-      + 'This game plays best in <strong style="color:#00e5ff">landscape</strong> mode.<br>'
-      + 'Turn your phone sideways for the full experience.</div>'
-      + '<button id="dz-rotate-skip" style="padding:11px 28px;background:rgba(255,255,255,0.06);'
-      + 'border:1px solid rgba(255,255,255,0.18);border-radius:10px;'
-      + 'color:rgba(255,255,255,0.55);font-family:Rajdhani,sans-serif;'
-      + 'font-size:0.82rem;cursor:pointer;letter-spacing:0.06em;'
-      + 'touch-action:manipulation;-webkit-tap-highlight-color:transparent;">'
-      + 'Play in portrait anyway</button>';
-    document.body.appendChild(ov);
-    _rotateOverlay = ov;
-    ov.querySelector('#dz-rotate-skip').addEventListener('click', function() {
-      ov.style.display = 'none';
-      _landscapeDismissed = true;
-    });
-    return ov;
-  }
-
-  var _landscapeDismissed = false;
-
-  function checkLandscapePrompt(screenId) {
-    _landscapeDismissed = false;
-    if (!LANDSCAPE_GAMES[screenId]) return;
-    var isMobile  = window.innerWidth <= 900 && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    var isPortrait = window.innerHeight > window.innerWidth;
-    var ov = createRotateOverlay();
-    ov.style.display = (isMobile && isPortrait) ? 'flex' : 'none';
-  }
-
-  function updateLandscapePrompt() {
-    if (!_rotateOverlay || _landscapeDismissed) return;
-    var isPortrait = window.innerHeight > window.innerWidth;
-    _rotateOverlay.style.display = isPortrait ? _rotateOverlay.style.display : 'none';
-  }
 
   // ── D-pad auto scaling ────────────────────────────────────────
   function scaleDpad() {
@@ -392,15 +328,7 @@
     });
   }
 
-  window.addEventListener('resize', function() { scaleCanvases(); scaleDpad(); updateLandscapePrompt(); });
-  window.addEventListener('orientationchange', function() {
-    setTimeout(function() {
-      scaleCanvases();
-      scaleDpad();
-      updateLandscapePrompt();
-      window.dispatchEvent(new Event('resize'));
-    }, 300);
-  });
+  window.addEventListener('resize', function() { scaleCanvases(); scaleDpad(); });
 
   // ── Prevent pinch zoom ────────────────────────────────────────
   document.addEventListener('touchstart', function(e) {
@@ -442,6 +370,6 @@
   scaleCanvases();
   scaleDpad();
 
-  window.DZMobile = { showWrapper: showWrapper, hideWrapper: hideWrapper, relocateControls: relocateControls, requestFS: requestFS, exitFS: exitFS, isFS: isFS, checkLandscapePrompt: checkLandscapePrompt };
+  window.DZMobile = { showWrapper: showWrapper, hideWrapper: hideWrapper, relocateControls: relocateControls, requestFS: requestFS, exitFS: exitFS, isFS: isFS };
 
 })();

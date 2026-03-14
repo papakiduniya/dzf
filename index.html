@@ -10,6 +10,8 @@
     gtag('config', 'G-2J0DDSF6BV');
   </script>
   <meta name="monetag" content="ba98e9cf393508cc2f16b48abda0e2a0">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7303252613346738"
+     crossorigin="anonymous"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
   <meta name="theme-color" content="#07080f"/>
@@ -1359,6 +1361,21 @@
 
     </main>
 
+
+    <!-- ── Hub ad unit — shown only on hub screen, above footer ── -->
+    <div id="hub-footer-ad" style="display:flex;justify-content:center;align-items:center;width:100%;padding:12px 0 4px;">
+      <script>
+        atOptions = {
+          'key' : 'e4597720f7ceeecbe1bda9e5f182b8b3',
+          'format' : 'iframe',
+          'height' : 50,
+          'width' : 320,
+          'params' : {}
+        };
+      </script>
+      <script src="https://www.highperformanceformat.com/e4597720f7ceeecbe1bda9e5f182b8b3/invoke.js"></script>
+    </div>
+
     <footer id="footer">
       <div class="footer-inner">
         <div class="footer-brand">
@@ -1577,7 +1594,7 @@
       <button class="ghp-back-hub" onclick="window.dzNavShowHome&&window.dzNavShowHome()">← Hub</button>
       <button class="ghp-back-game" id="rps-back-to-home">⚙ Setup</button>
     </div>
-    <div id="rps-app" style="padding-top:54px;box-sizing:border-box;">
+    <div id="rps-app" style="padding-top:72px;box-sizing:border-box;"><!-- BUG 6 FIX: was 54px (< 60px hamburger bottom); CSS overhaul !important wins anyway but kept in sync -->
       <header class="game-header">
         <p class="game-mode-label" id="rps-mode-label">LOCAL PvP</p>
         <h2 class="game-title">Rock Paper Scissors</h2>
@@ -1591,8 +1608,9 @@
       <div id="rps-bestof-selector">
         <span class="diff-label-text">BEST OF</span>
         <div class="diff-btn-group">
-          <button class="diff-btn active" id="rps-bo3">3</button>
-          <button class="diff-btn" id="rps-bo5">5</button>
+          <button class="diff-btn" id="rps-bo3">3</button>
+          <!-- BUG 2 FIX: active moved from rps-bo3 to rps-bo5 — matches rpsBestOf = 5 default -->
+          <button class="diff-btn active" id="rps-bo5">5</button>
           <button class="diff-btn" id="rps-bo7">7</button>
         </div>
       </div>
@@ -2801,7 +2819,7 @@
       <div id="cdd-app">
 
         <!-- Header -->
-        <div id="cdd-header" style="padding-top:54px;">
+        <div id="cdd-header" style="padding-top:72px;"><!-- BUG 5/6 SYNC FIX: was 54px; CSS overhaul !important wins but kept in sync -->
           <h2 id="cdd-title">Connect Dots Duel</h2>
           <p id="cdd-mode-label">PvP</p>
         </div>

@@ -1252,9 +1252,13 @@ function rpsRevealChoices(p1c, p2c) {
 
   rpsRound++;
   rpsRoundNumEl.textContent = rpsRound;
-  rpsP1Choice = null; rpsAwaitingP2 = false; rpsLocked = false;
+  rpsP1Choice = null; rpsAwaitingP2 = false;
+  // BUG 1 FIX: rpsLocked stays true until the 1200 ms animation completes.
+  // Moving it inside the setTimeout prevents P1 from spam-clicking in PvE
+  // mode and triggering a new round while the reveal animation is still running.
 
   setTimeout(function(){
+    rpsLocked = false;
     rpsP1EmojiEl.textContent = '?'; rpsP2EmojiEl.textContent = '?';
     rpsResultEl.textContent = '';
     rpsResultEl.className = '';
