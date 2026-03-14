@@ -43,15 +43,11 @@ var screenReaction     = document.getElementById('screen-reaction');
 var screenTerritory    = document.getElementById('screen-territory');
 // BUG 1 FIX: These screens were never added to ALL_SCREENS, so hideAllScreens()
 // never hid them — they would bleed through on top of the next game or hub.
-var screenLudo       = document.getElementById('screen-ludo');
-var screenSudoku     = document.getElementById('screen-sudoku');
-var screenCarrom     = document.getElementById('screen-carrom');
-// BUG FIX: screenDrawGuess was never declared — accessing it in showDrawGuess()
-// threw a ReferenceError, crashing the game launch. Also adds it to ALL_SCREENS
-// so the screen is properly hidden when navigating away (bleed-through fix).
-var screenDrawGuess  = document.getElementById('screen-drawguess');
+var screenLudo     = document.getElementById('screen-ludo');
+var screenSudoku   = document.getElementById('screen-sudoku');
+var screenCarrom   = document.getElementById('screen-carrom');
 
-var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom, screenDrawGuess];
+var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom];
 // Note: screenMFD and screenCDD are push()ed to ALL_SCREENS
 // later in their respective sections once their vars are declared.
 
@@ -75,11 +71,7 @@ function showHub() {
 
   // Show ad interstitial for 3 seconds, then navigate to hub
   var adOverlay    = document.getElementById('dz-ad-interstitial');
-  // BUG FIX: 'dz-ad-countdown' was a duplicate ID (also used in the ad-overlay skip
-  // timer). getElementById() returns the FIRST match — the skip badge, not the
-  // interstitial text — so the interstitial countdown was always frozen at "3".
-  // The interstitial span ID has been renamed to 'dz-interstitial-countdown'.
-  var countdown    = document.getElementById('dz-interstitial-countdown');
+  var countdown    = document.getElementById('dz-ad-countdown');
   var _doShowHub   = function() {
     if (adOverlay) adOverlay.style.display = 'none';
     hideAllScreens();
@@ -146,7 +138,7 @@ function showC4() {
 function showCricket() {
   hideAllScreens();
   screenCricket.classList.remove('hidden');
-  cricketResetToSetup();
+  cricResetToSetup();
   window.scrollTo(0, 0);
 }
 
@@ -945,7 +937,14 @@ function ttFindWin(mark){
   } return -1;
 }
 function tttBotEasy(){var e=tttEmpty();return e[Math.floor(Math.random()*e.length)];}
-function tttBotMed(){var w=ttFindWin('O');return w!==-1?w:tttBotEasy();}
+function tttBotMed(){
+  var w=ttFindWin('O'); if(w!==-1) return w;   // win if possible
+  var b=ttFindWin('X'); if(b!==-1) return b;   // block X from winning
+  // Prefer centre, then corners, then edges
+  var prio=[4,0,2,6,8,1,3,5,7];
+  for(var i=0;i<prio.length;i++){ if(tttBoard[prio[i]]==='') return prio[i]; }
+  return tttBotEasy();
+}
 function tttMinimax(isMax, depth, alpha, beta) {
   var oWin = tttWinLine('O') !== null;
   var xWin = tttWinLine('X') !== null;
@@ -953,11 +952,15 @@ function tttMinimax(isMax, depth, alpha, beta) {
   if (xWin) return depth - 10;
   var empty = tttEmpty();
   if (!empty.length) return 0;
+  // FIX: declare best/s/i once at function scope — avoids ES5 var-hoisting bug
+  // where 'var best = Infinity' in the else branch was silently a no-op,
+  // because hoisting merged both declarations into one (initialized to undefined).
+  var best, s, i;
   if (isMax) {
-    var best = -Infinity;
-    for (var i = 0; i < empty.length; i++) {
+    best = -Infinity;
+    for (i = 0; i < empty.length; i++) {
       tttBoard[empty[i]] = 'O';
-      var s = tttMinimax(false, depth + 1, alpha, beta);
+      s = tttMinimax(false, depth + 1, alpha, beta);
       tttBoard[empty[i]] = '';
       if (s > best) best = s;
       if (s > alpha) alpha = s;
@@ -965,10 +968,10 @@ function tttMinimax(isMax, depth, alpha, beta) {
     }
     return best;
   } else {
-    var best = Infinity;
-    for (var i = 0; i < empty.length; i++) {
+    best = Infinity;
+    for (i = 0; i < empty.length; i++) {
       tttBoard[empty[i]] = 'X';
-      var s = tttMinimax(true, depth + 1, alpha, beta);
+      s = tttMinimax(true, depth + 1, alpha, beta);
       tttBoard[empty[i]] = '';
       if (s < best) best = s;
       if (s < beta) beta = s;
@@ -1790,33 +1793,6 @@ function d2048DoMove(pIdx, dir, onDone) {
   return true;
 }
 
-function d2048HasMoves(pIdx) {
-  var occupied = {};
-  d2048Tiles[pIdx].forEach(function(t) { occupied[t.row + ',' + t.col] = true; });
-  for (var r = 0; r < 4; r++) {
-    for (var c = 0; c < 4; c++) {
-      if (!occupied[r + ',' + c]) return true;
-    }
-  }
-  // Check adjacent equal tiles
-  d2048Tiles[pIdx].forEach(function(t) {
-    if (!occupied) return; // shortcut
-    [[0,1],[0,-1],[1,0],[-1,0]].forEach(function(d) {
-      var nr = t.row + d[0], nc = t.col + d[1];
-      if (nr < 0 || nr > 3 || nc < 0 || nc > 3) return;
-      var neighbor = null;
-      for (var i = 0; i < d2048Tiles[pIdx].length; i++) {
-        if (d2048Tiles[pIdx][i].row === nr && d2048Tiles[pIdx][i].col === nc) {
-          neighbor = d2048Tiles[pIdx][i]; break;
-        }
-      }
-      if (neighbor && neighbor.value === t.value) occupied = null; // signal: has moves
-    });
-  });
-  return occupied === null; // if occupied got nulled, there are moves
-}
-
-// A cleaner hasMovesCheck since the above has a subtle bug:
 function d2048CanMove(pIdx) {
   var grid = [[null,null,null,null],[null,null,null,null],[null,null,null,null],[null,null,null,null]];
   d2048Tiles[pIdx].forEach(function(t) { grid[t.row][t.col] = t.value; });
@@ -2072,8 +2048,9 @@ function d2048StartSimBot() {
 
 // ── Init ────────────────────────────────────────────────────────
 function d2048Init() {
-  clearInterval(d2048BotTimer); d2048BotTimer = null;
+  clearInterval(d2048BotTimer);
   clearTimeout(d2048BotTimer);
+  d2048BotTimer = null;
 
   d2048Tiles      = [[], []];
   d2048Scores     = [0, 0];
@@ -3496,7 +3473,14 @@ function c4BotDrop(col) {
   if (!c4GameActive) return;
   if (col < 0 || col >= C4_COLS) return;
   var row = c4GetNextOpenRow(c4Board, col);
-  if (row === -1) { c4ResetGame(); return; }
+  if (row === -1) {
+    // Bot returned a full column — pick any valid column instead of resetting the whole game
+    var fallback = c4GetValidColumns(c4Board);
+    if (!fallback.length) { c4EndGame(null, null); return; }
+    col = fallback[Math.floor(Math.random() * fallback.length)];
+    row = c4GetNextOpenRow(c4Board, col);
+    if (row === -1) return; // should never happen
+  }
   c4Board[row][col] = c4CurrentPlayer;
   c4RenderCell(row, col, c4CurrentPlayer, true);
   SoundManager.c4Drop();
@@ -4838,6 +4822,7 @@ function pbSubmitGuess() {
   document.getElementById('pb-attempts-val').textContent = pb.attempts;
 
   var feedback = pbGetFeedback(guess, pb.secret);
+  pb.guessHistory.push({ guess: guess, feedback: feedback });
   pbRenderRow(guess, feedback, pb.attempts);
 
   // Play sounds based on feedback
@@ -6585,8 +6570,8 @@ var GlobalBotEngine = (function() {
     gameId:      'cricket',
     containerId: 'screen-cricket',
     init:   function() {},
-    start:  function() { cricketResetToSetup(); },
-    reset:  function() { cricketResetToSetup(); },
+    start:  function() { cricResetToSetup(); },
+    reset:  function() { cricResetToSetup(); },
     destroy: function() {
       cricNumpadLocked = true;
     }
@@ -7077,15 +7062,19 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
 
     // ── Compute sizes that always fit the screen ──────────────
     // DOT: fixed small size for the dot rows/columns
-    var DOT = 12;
-    // Available width: viewport minus container side padding (2×16px),
-    // capped at the #cdd-app max-width of 520px
-    var availW = Math.min(window.innerWidth - 32, 520);
-    // CELL fills remaining space evenly; clamp to sensible range
-    var CELL = Math.floor((availW - (G + 1) * DOT) / G);
-    if (G <= 3) CELL = Math.min(CELL, 92);   // don't get absurdly large on desktop
-    if (G <= 5) CELL = Math.min(CELL, 74);
-    CELL = Math.max(CELL, 28);               // minimum touch-friendly size
+    var DOT = 10;
+    // Available width: container width minus padding (2×8px), capped at max-width
+    var availW = Math.min((cddGrid.parentElement ? cddGrid.parentElement.clientWidth - 16 : window.innerWidth - 32), 516);
+    // Available height: grid-wrap height minus padding
+    var wrapEl = document.getElementById('cdd-grid-wrap');
+    var availH = wrapEl ? wrapEl.clientHeight - 16 : availW;
+    // CELL: fit both width and height
+    var CELL_W = Math.floor((availW - (G + 1) * DOT) / G);
+    var CELL_H = Math.floor((availH - (G + 1) * DOT) / G);
+    var CELL = Math.min(CELL_W, CELL_H);
+    if (G <= 3) CELL = Math.min(CELL, 88);
+    if (G <= 5) CELL = Math.min(CELL, 68);
+    CELL = Math.max(CELL, 24);
     // Expose sizes as CSS custom properties so CSS rules can read them
     cddGrid.style.setProperty('--cdd-dot-sz',  DOT  + 'px');
     cddGrid.style.setProperty('--cdd-cell-sz', CELL + 'px');
@@ -7209,8 +7198,15 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     // Check box completion
     var boxesClaimed = cddCheckBoxes(player);
 
+    // ── Check game over FIRST, before any turn-switch or bot schedule ──
+    if (cdd.drawnLines >= cdd.totalLines) {
+      if (boxesClaimed > 0) cddUpdateScores(); // commit final box claims to display
+      cddEndGame();
+      return;
+    }
+
     if (boxesClaimed > 0) {
-      // Player keeps turn
+      // Player keeps turn (claimed at least one box)
       cddUpdateScores();
       if (cdd.gameOver) return;
       SoundManager.gameStart(); // box completion sound
@@ -7223,11 +7219,6 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
       // Switch turn
       cddSwitchTurn();
       SoundManager.tttMove(); // line draw / turn switch sound
-    }
-
-    // Check game over
-    if (cdd.drawnLines >= cdd.totalLines) {
-      cddEndGame();
     }
   }
 
@@ -7418,7 +7409,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
 
   // ── Register GlobalBotEngine strategy ────────────────────────
 
-  GlobalBotEngine._strategies['connectdots'] = function(difficulty, state, mem) {
+  GlobalBotEngine.registerStrategy('connectdots', function(difficulty, state, mem) {
     var available = state.availableLines;
     if (!available || !available.length) return null;
 
@@ -7519,7 +7510,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     });
 
     return bestLine || available[Math.floor(Math.random() * available.length)];
-  };
+  });
 
   // ── GameLoader Registration ───────────────────────────────────
 
@@ -7528,6 +7519,27 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     containerId: 'screen-connectdots',
     init: function() {
       // All wiring is done at parse time above
+      // Re-render grid on resize/orientation change
+      window.addEventListener('resize', function() {
+        if (!cdd.gameOver && document.getElementById('cdd-play') && !document.getElementById('cdd-play').classList.contains('hidden')) {
+          cddRenderGrid();
+          // Restore drawn lines and completed boxes visually
+          Object.keys(cdd.lines).forEach(function(lid) {
+            var ln = cdd.lines[lid];
+            if (!ln.isDrawn) return;
+            var el = cddGrid && cddGrid.querySelector('[data-lineid="' + lid + '"]');
+            if (el) {
+              el.classList.add('drawn');
+              el.classList.add(ln.owner === 'p1' ? 'drawn-p1' : 'drawn-p2');
+            }
+          });
+          Object.keys(cdd.boxes).forEach(function(bid) {
+            var box = cdd.boxes[bid];
+            if (!box.isCompleted) return;
+            cddAnimateBox(bid, box.owner);
+          });
+        }
+      });
     },
     start: function() {
       // Show home/setup panel
