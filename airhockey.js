@@ -173,9 +173,17 @@ function ahResize() {
         ahPuck.vServe.vy = ahPuck.vServe.vy / sm * newSpd;
       }
     }
-    // Rescale live puck velocity proportionally
+    // Rescale live puck velocity proportionally then re-lock to current target speed.
+    // sx and sy can differ when the canvas aspect ratio changes, so a simple
+    // component-wise scale would change the actual speed — normalize after.
     if (ahPuck.vx !== 0 || ahPuck.vy !== 0) {
       ahPuck.vx *= sx; ahPuck.vy *= sy;
+      var vm = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
+      if (vm > 0.01) {
+        var ts = ahGetSpeed();
+        ahPuck.vx = ahPuck.vx / vm * ts;
+        ahPuck.vy = ahPuck.vy / vm * ts;
+      }
     }
   }
   ahW = newW; ahH = newH;
@@ -264,15 +272,48 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
 
   if (paddleIdx === 0) {
     // ── P1 (bottom) → always sends ball UP toward P2's goal ──
-    ahPuck.vy = -spd;                    // always going UP (toward P2)
+    ahPuck.vy = -spd;
     if      (relX < -0.33) ahPuck.vx = -med;  // left  1/3 → angled left
     else if (relX <  0.33) ahPuck.vx =  0;    // mid   1/3 → straight
     else                   ahPuck.vx = +med;  // right 1/3 → angled right
   } else {
     // ── P2 (top) → always sends ball DOWN toward P1's goal ──
-    ahPuck.vy = +spd;                    // always going DOWN (toward P1)
-    if (relX < 0) ahPuck.vx = -spd;     // left  half → angled left (fast)
-    else          ahPuck.vx = +med;     // right half → angled right (medium)
+    ahPuck.vy = +spd;
+    if (relX < 0) ahPuck.vx = -spd;           // left  half → angled left
+    else          ahPuck.vx = +med;           // right half → angled right
+  }
+
+  // FIX 1 — FIXED SPEED: normalize the velocity vector to exactly ahGetSpeed()
+  // so diagonal hits (vx AND vy both non-zero) don't produce √(vx²+vy²) > spd.
+  // Without this, angled hits were ~36% faster than straight hits, causing the
+  // perceived "random speed changes" every time the puck struck the paddle edge.
+  var mag = Math.sqrt(ahPuck.vx * ahPuck.vx + ahPuck.vy * ahPuck.vy);
+  if (mag > 0.01) {
+    ahPuck.vx = ahPuck.vx / mag * spd;
+    ahPuck.vy = ahPuck.vy / mag * spd;
+  }
+
+  // FIX 2 — MINIMUM ANGLE: ensure the puck always has at least a 12° component
+  // on both axes after a hit. A purely vertical or horizontal trajectory is the
+  // primary cause of corner lock-in — the puck bounces between two parallel walls
+  // indefinitely without ever reaching a paddle.
+  var MIN_RATIO = Math.sin(12 * Math.PI / 180); // ≈ 0.208
+  var absVx = Math.abs(ahPuck.vx), absVy = Math.abs(ahPuck.vy);
+  if (absVx < spd * MIN_RATIO) {
+    // vx too small — nudge it away from zero, preserving the hit direction
+    var nudge = spd * MIN_RATIO * (ahPuck.x < ahW / 2 ? -1 : 1);
+    ahPuck.vx = nudge;
+    // Re-normalize to keep speed constant
+    mag = Math.sqrt(ahPuck.vx * ahPuck.vx + ahPuck.vy * ahPuck.vy);
+    ahPuck.vx = ahPuck.vx / mag * spd;
+    ahPuck.vy = ahPuck.vy / mag * spd;
+  }
+  if (absVy < spd * MIN_RATIO) {
+    var nudgeY = spd * MIN_RATIO * (paddleIdx === 0 ? -1 : 1);
+    ahPuck.vy = nudgeY;
+    mag = Math.sqrt(ahPuck.vx * ahPuck.vx + ahPuck.vy * ahPuck.vy);
+    ahPuck.vx = ahPuck.vx / mag * spd;
+    ahPuck.vy = ahPuck.vy / mag * spd;
   }
 
   ahAumenta();   // air.js aumenta(): inc += 1.3, max 20
@@ -337,32 +378,75 @@ function ahPhysicsStep(dt) {
   ahPuck.x += ahPuck.vx * sec;
   ahPuck.y += ahPuck.vy * sec;
 
-  // ── Left / right wall bounces (air.js top/bottom bounce rotated) ──
+  // ── Wall bounces ───────────────────────────────────────────────
+  // Each wall check: correct position, flip the relevant component, then
+  // re-normalize to ahGetSpeed() so the bounce never alters puck speed.
+
+  var bounced = false;
+
   if (ahPuck.x - r < 0) {
     ahPuck.x = r;
     ahPuck.vx = Math.abs(ahPuck.vx);
+    bounced = true;
     ahSnd.wallBounce();
     ahSpawnWallSparks(r, ahPuck.y);
   }
   if (ahPuck.x + r > ahW) {
     ahPuck.x = ahW - r;
     ahPuck.vx = -Math.abs(ahPuck.vx);
+    bounced = true;
     ahSnd.wallBounce();
     ahSpawnWallSparks(ahW - r, ahPuck.y);
   }
-
-  // ── Top / bottom walls bounce ONLY outside the goal zone ──
   if (ahPuck.y - r < 0 && !(ahPuck.x > cx-gw && ahPuck.x < cx+gw)) {
     ahPuck.y = r;
     ahPuck.vy = Math.abs(ahPuck.vy);
+    bounced = true;
     ahSnd.wallBounce();
     ahSpawnWallSparks(ahPuck.x, r);
   }
   if (ahPuck.y + r > ahH && !(ahPuck.x > cx-gw && ahPuck.x < cx+gw)) {
     ahPuck.y = ahH - r;
     ahPuck.vy = -Math.abs(ahPuck.vy);
+    bounced = true;
     ahSnd.wallBounce();
     ahSpawnWallSparks(ahPuck.x, ahH - r);
+  }
+
+  if (bounced) {
+    // FIX 2a — RE-NORMALIZE after bounce: wall flips only change sign of one
+    // component, so magnitude is preserved — but combined with the earlier angle
+    // normalization this keeps everything consistent and avoids drift.
+    var bspd = ahGetSpeed();
+    var bmag = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
+    if (bmag > 0.01) { ahPuck.vx = ahPuck.vx/bmag*bspd; ahPuck.vy = ahPuck.vy/bmag*bspd; }
+
+    // FIX 2b — CORNER ESCAPE: detect when the puck has bounced off two walls
+    // in the same frame (it is in a corner). The puck can get trapped by
+    // repeatedly hitting both walls with a trajectory that is nearly parallel
+    // to one of them. Detect near-axis travel and inject a minimum lateral
+    // component so the puck always escapes the corner zone.
+    var MIN_CORNER = Math.sin(18 * Math.PI / 180); // 18° minimum off each axis
+    var inLeftWall  = ahPuck.x - r <= r * 1.5;
+    var inRightWall = ahPuck.x + r >= ahW - r * 1.5;
+    var inTopWall   = ahPuck.y - r <= r * 1.5;
+    var inBotWall   = ahPuck.y + r >= ahH - r * 1.5;
+    var inCorner = (inLeftWall || inRightWall) && (inTopWall || inBotWall);
+
+    if (inCorner) {
+      var curSpd = ahGetSpeed();
+      // Force a minimum angle away from both walls
+      var absVx = Math.abs(ahPuck.vx), absVy = Math.abs(ahPuck.vy);
+      if (absVx < curSpd * MIN_CORNER) {
+        ahPuck.vx = curSpd * MIN_CORNER * (inRightWall ? -1 : 1);
+      }
+      if (absVy < curSpd * MIN_CORNER) {
+        ahPuck.vy = curSpd * MIN_CORNER * (inBotWall ? -1 : 1);
+      }
+      // Re-normalize one final time
+      var cm = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
+      if (cm > 0.01) { ahPuck.vx = ahPuck.vx/cm*curSpd; ahPuck.vy = ahPuck.vy/cm*curSpd; }
+    }
   }
 
   // ── Paddle collisions → air.js angle assignment ──
@@ -497,17 +581,26 @@ function ahLoop(ts) {
 
   var goalScored = ahPhysicsStep(dt);
 
-  // Stuck puck rescue (quality-of-life — not in air.js but keeps game flowing)
-  // Fires after 1 500 ms of near-zero puck speed during active play.
+  // ── Stuck puck rescue ──────────────────────────────────────────
+  // Triggers if the puck's speed drops near-zero (e.g. two paddles cancel
+  // each other), or if the puck stays on one half of the table for too long
+  // (corner oscillation — the puck bounces between two walls but never
+  // reaches either paddle because it won't cross the centre line).
   var puckSpd = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
-  if (puckSpd < 50 * (ahW/400)) {
+  var nearZero = puckSpd < 40 * (ahW/400);
+  var crossingCentre = (ahPuck.vy < 0 && ahPuck.y < ahH*0.5) ||
+                       (ahPuck.vy > 0 && ahPuck.y > ahH*0.5);
+
+  if (nearZero || !crossingCentre) {
     ahStuckTimer += dt;
-    if (ahStuckTimer > 1500) {
+    if (ahStuckTimer > (nearZero ? 800 : 2200)) {
       ahStuckTimer = 0;
-      var rescueAngle = (Math.random()-0.5) * (Math.PI/4);
-      var rescueDir   = ahPuck.y < ahH/2 ? 1 : -1; // aim away from nearest end
-      ahPuck.vx = Math.sin(rescueAngle) * ahGetSpeed();
-      ahPuck.vy = rescueDir * Math.cos(rescueAngle) * ahGetSpeed();
+      // Rescue: aim the puck toward the far end's centre at current speed
+      var rescueDir = ahPuck.y < ahH/2 ? 1 : -1;
+      var rescueAngle = (Math.random()-0.5) * (Math.PI/5); // ±18° spread
+      var rspd = ahGetSpeed();
+      ahPuck.vx = Math.sin(rescueAngle) * rspd;
+      ahPuck.vy = rescueDir * Math.cos(rescueAngle) * rspd;
       ahSnd.puckStart();
     }
   } else {

@@ -15071,18 +15071,20 @@ body.dz-game-landscape-required #dz-portrait-warn {
    ══════════════════════════════════════════════════════════ */
 
 /* ── Whole play wrapper ── */
+/* FIX: use :not(.hidden) so .hidden { display:none !important } is never
+   overridden. Both rules are !important with equal specificity (one class
+   each); the last declaration wins in CSS — scoping to :not(.hidden) means
+   this display:flex only applies when the panel is actually visible. */
+.cdd-play-wrap:not(.hidden) {
+  display: flex !important;
+}
 .cdd-play-wrap {
   min-height: 100dvh !important;
-  display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   background: linear-gradient(160deg, #05071a 0%, #0a0d20 60%, #070b18 100%) !important;
   padding: 0 !important;
   box-sizing: border-box !important;
-  /* BUG 7 FIX: position:relative was absent from this overhaul block.
-     .ghp-back-game is position:absolute top:72px left:16px — without a
-     positioned ancestor it anchors to the viewport/screen element instead of
-     the wrapper, causing misplacement when the page scrolls. */
   position: relative !important;
 }
 

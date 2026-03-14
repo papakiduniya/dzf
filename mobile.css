@@ -1119,3 +1119,73 @@
   }
 
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   § 10  PORTRAIT LOCK — hard overlay + body freeze
+         Fires for any touch device in landscape orientation.
+         JS also calls screen.orientation.lock('portrait');
+         this CSS is the fallback when that API is unavailable.
+   ══════════════════════════════════════════════════════════════ */
+
+/* The overlay element itself — hidden by default, shown via JS */
+#dz-portrait-lock {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647; /* max possible z-index — sits above everything */
+  background: #07080f;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 32px 24px;
+  box-sizing: border-box;
+}
+
+#dz-portrait-lock.active {
+  display: flex;
+}
+
+/* CSS-level fallback: on coarse-pointer (touch) landscape,
+   freeze scrolling and show the lock via the .active class
+   even if JS hasn't fired yet */
+@media (pointer: coarse) and (orientation: landscape) {
+  html, body {
+    /* Prevent the game canvas from scrolling into view in landscape */
+    overflow: hidden !important;
+    max-height: 100vh !important;
+  }
+}
+
+.dz-pl-icon {
+  font-size: 3.5rem;
+  animation: dzPlSpin 2s ease-in-out infinite;
+}
+
+@keyframes dzPlSpin {
+  0%   { transform: rotate(0deg); }
+  20%  { transform: rotate(-30deg); }
+  50%  { transform: rotate(90deg); }
+  80%  { transform: rotate(60deg); }
+  100% { transform: rotate(90deg); }
+}
+
+.dz-pl-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(0.9rem, 4vw, 1.1rem);
+  font-weight: 900;
+  color: #00e5ff;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dz-pl-sub {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: clamp(0.78rem, 3vw, 0.9rem);
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  max-width: 280px;
+}

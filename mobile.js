@@ -330,6 +330,31 @@
 
   window.addEventListener('resize', function() { scaleCanvases(); scaleDpad(); });
 
+  /* ── Portrait-lock: pause all game loops when device goes landscape ──
+     The HTML portrait-lock overlay covers the screen visually, but
+     position:fixed game panels (tetris-play, rd-play, etc.) can still
+     render at landscape dimensions during the orientation transition.
+     Suspending all audio contexts and dispatching DZ_PAUSED stops any
+     active game loop from advancing frames behind the overlay. */
+  window.addEventListener('orientationchange', function () {
+    setTimeout(function () {
+      scaleCanvases();
+      scaleDpad();
+      var isLandscape = window.innerWidth > window.innerHeight;
+      if (isLandscape) {
+        /* Signal all game loops to pause */
+        window.DZ_PAUSED = true;
+        if (typeof dzSuspendAllAudio === 'function') dzSuspendAllAudio();
+      } else {
+        /* Back to portrait — resume */
+        window.DZ_PAUSED = false;
+        if (typeof dzResumeAllAudio === 'function') dzResumeAllAudio();
+      }
+      /* Let the HTML orientation script update the lock overlay */
+      if (typeof window.dzCheckOrientation === 'function') window.dzCheckOrientation();
+    }, 150);
+  });
+
   // ── Prevent pinch zoom ────────────────────────────────────────
   document.addEventListener('touchstart', function(e) {
     if (e.touches.length > 1) e.preventDefault();
