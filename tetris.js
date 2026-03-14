@@ -15,17 +15,19 @@
     var isLandscape = vw > vh && vh < 520;
     var cellByW, cellByH;
     if (isLandscape) {
-      // Two boards side by side — each board is COLS wide
-      // Reserve 8px gutters: (vw - 32) / (COLS * 2 + gap_cols)
-      cellByW = Math.floor((vw - 40) / (COLS * 2 + 2));
-      // Height: full vh minus HUD(44px) + topbar
-      cellByH = Math.floor((vh - 56) / ROWS);
+      // Two boards side by side. Budget:
+      // Width:  vw minus 48px padding/gap across 2*COLS + 2 gap columns
+      // Height: vh minus topbar (44px) only — heading is hidden by CSS in landscape
+      cellByW = Math.floor((vw - 48) / (COLS * 2 + 2));
+      cellByH = Math.floor((vh - 44) / ROWS);
+      // Allow smaller cells in landscape so boards always fit; max is still 28
+      CELL = Math.max(10, Math.min(28, cellByW, cellByH));
     } else {
-      // Portrait: boards stack side by side, fit in half screen width
+      // Portrait: boards side by side, fit in half screen width
       cellByW = Math.floor((vw - 32) / (COLS * 2 + 2));
       cellByH = Math.floor((vh * 0.7) / ROWS);
+      CELL = Math.max(16, Math.min(28, cellByW, cellByH));
     }
-    CELL = Math.max(16, Math.min(28, cellByW, cellByH));
   }
 
   var PIECES = [

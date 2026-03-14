@@ -43,11 +43,15 @@ var screenReaction     = document.getElementById('screen-reaction');
 var screenTerritory    = document.getElementById('screen-territory');
 // BUG 1 FIX: These screens were never added to ALL_SCREENS, so hideAllScreens()
 // never hid them — they would bleed through on top of the next game or hub.
-var screenLudo     = document.getElementById('screen-ludo');
-var screenSudoku   = document.getElementById('screen-sudoku');
-var screenCarrom   = document.getElementById('screen-carrom');
+var screenLudo       = document.getElementById('screen-ludo');
+var screenSudoku     = document.getElementById('screen-sudoku');
+var screenCarrom     = document.getElementById('screen-carrom');
+// BUG FIX: screenDrawGuess was never declared — accessing it in showDrawGuess()
+// threw a ReferenceError, crashing the game launch. Also adds it to ALL_SCREENS
+// so the screen is properly hidden when navigating away (bleed-through fix).
+var screenDrawGuess  = document.getElementById('screen-drawguess');
 
-var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom];
+var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom, screenDrawGuess];
 // Note: screenMFD and screenCDD are push()ed to ALL_SCREENS
 // later in their respective sections once their vars are declared.
 
@@ -71,7 +75,11 @@ function showHub() {
 
   // Show ad interstitial for 3 seconds, then navigate to hub
   var adOverlay    = document.getElementById('dz-ad-interstitial');
-  var countdown    = document.getElementById('dz-ad-countdown');
+  // BUG FIX: 'dz-ad-countdown' was a duplicate ID (also used in the ad-overlay skip
+  // timer). getElementById() returns the FIRST match — the skip badge, not the
+  // interstitial text — so the interstitial countdown was always frozen at "3".
+  // The interstitial span ID has been renamed to 'dz-interstitial-countdown'.
+  var countdown    = document.getElementById('dz-interstitial-countdown');
   var _doShowHub   = function() {
     if (adOverlay) adOverlay.style.display = 'none';
     hideAllScreens();

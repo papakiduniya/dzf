@@ -9403,229 +9403,6 @@ select {
 }
 
 
-/* ══════════════════════════════════════════════════════════
-   FLOATING HAMBURGER BUTTON
-   ══════════════════════════════════════════════════════════ */
-
-/* The hamburger floats top-left over everything */
-.hamburger-btn {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 9999;
-  width: 44px;
-  height: 44px;
-  background: rgba(10,12,22,0.88);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 0;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-  transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
-}
-
-.hamburger-btn:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.22);
-  box-shadow: 0 4px 24px rgba(0,229,255,0.15);
-}
-
-.hamburger-btn.open {
-  background: rgba(0,229,255,0.12);
-  border-color: rgba(0,229,255,0.45);
-  box-shadow: 0 4px 24px rgba(0,229,255,0.25);
-}
-
-.ham-line {
-  display: block;
-  width: 20px;
-  height: 2px;
-  background: rgba(255,255,255,0.8);
-  border-radius: 2px;
-  transition: all 0.32s cubic-bezier(0.23,1,0.32,1);
-  transform-origin: center;
-}
-
-.hamburger-btn.open .ham-line:nth-child(1) {
-  transform: translateY(7px) rotate(45deg);
-  background: #00e5ff;
-  width: 22px;
-}
-.hamburger-btn.open .ham-line:nth-child(2) {
-  opacity: 0;
-  transform: scaleX(0);
-}
-.hamburger-btn.open .ham-line:nth-child(3) {
-  transform: translateY(-7px) rotate(-45deg);
-  background: #00e5ff;
-  width: 22px;
-}
-
-/* Saved-games badge on hamburger */
-.hamburger-btn .nav-badge {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  background: linear-gradient(135deg, #f50057, #aa00ff);
-  color: #fff;
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 0.58rem;
-  font-weight: 700;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  border: 2px solid #07080f;
-  pointer-events: none;
-}
-
-/* ── Dropdown Menu ── */
-.dz-dropdown {
-  position: fixed;
-  top: 72px;
-  left: 16px;
-  width: 252px;
-  background: rgba(8,10,20,0.98);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 16px;
-  box-shadow: 0 24px 64px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.06);
-  z-index: 1090;
-  overflow: hidden;
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-8px) scale(0.97);
-  transform-origin: top left;
-  transition: opacity 0.26s ease, transform 0.26s cubic-bezier(0.23,1,0.32,1), visibility 0.26s;
-  pointer-events: none;
-}
-
-.dz-dropdown.open {
-  opacity: 1;
-  visibility: visible;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-/* Dropdown section label */
-.dropdown-section-label {
-  padding: 10px 18px 4px;
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: rgba(255,255,255,0.2);
-  text-transform: uppercase;
-}
-
-.dropdown-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 11px 18px;
-  background: transparent;
-  border: none;
-  color: rgba(255,255,255,0.65);
-  font-family: 'Rajdhani', sans-serif;
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  text-align: left;
-}
-
-.dropdown-item svg {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity 0.15s;
-}
-
-.dropdown-item:hover {
-  background: rgba(255,255,255,0.07);
-  color: #fff;
-}
-.dropdown-item:hover svg { opacity: 1; }
-
-.dropdown-item.active {
-  background: rgba(0,229,255,0.08);
-  color: #00e5ff;
-}
-.dropdown-item.active svg { opacity: 1; color: #00e5ff; }
-
-.dropdown-item--legal {
-  font-size: 0.82rem;
-  color: rgba(255,255,255,0.38);
-  padding: 9px 18px;
-}
-.dropdown-item--legal:hover { color: rgba(255,255,255,0.75); }
-
-.dropdown-divider {
-  height: 1px;
-  background: rgba(255,255,255,0.07);
-  margin: 4px 14px;
-}
-
-.dd-badge {
-  margin-left: auto;
-  background: linear-gradient(135deg, #f50057, #aa00ff);
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: 700;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-}
-
-/* Music toggle in dropdown */
-.dd-music-toggle {
-  margin-left: auto;
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 2px 8px;
-  border-radius: 20px;
-  border: 1.5px solid rgba(0,229,255,0.5);
-  color: #00e5ff;
-  background: rgba(0,229,255,0.08);
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-}
-.dd-music-toggle.off {
-  border-color: rgba(255,255,255,0.2);
-  color: rgba(255,255,255,0.3);
-  background: rgba(255,255,255,0.04);
-}
-#dd-music-btn.muted svg {
-  opacity: 0.35;
-}
-
-/* Backdrop to close menu on outside click */
-#dz-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1080;
-  display: none;
-}
-#dz-menu-backdrop.active { display: block; }
-
 /* ── Side Panels ── */
 .dz-side-panel {
   position: fixed;
@@ -10374,31 +10151,6 @@ select {
   animation: dzFadePulse 1.6s ease-in-out infinite;
 }
 @keyframes dzFadePulse { 0%,100%{opacity:.4;} 50%{opacity:.9;} }
-
-/* ── Card save button (added fix) ── */
-.card-save-btn {
-  position: absolute;
-  top: auto;
-  bottom: 14px;
-  right: 14px;
-  width: 30px;
-  height: 30px;
-  background: rgba(0,0,0,0.45);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 2;
-  transition: all 0.2s;
-  color: rgba(255,255,255,0.35);
-  padding: 0;
-}
-.card-save-btn svg { width:14px; height:14px; transition: all 0.2s; }
-.card-save-btn:hover { background:rgba(0,0,0,.65); color:rgba(255,255,255,.75); border-color:rgba(255,255,255,.3); }
-.card-save-btn.saved { color:#f50057; border-color:rgba(245,0,87,.5); background:rgba(245,0,87,.1); }
-.card-save-btn.saved svg { fill:#f50057; }
 
 /* ══════════════════════════════════════════════════════════
    REDESIGNED HAMBURGER MENU  (v2)
@@ -15043,3 +14795,215 @@ body.dz-game-landscape-required #dz-portrait-warn {
 
 }
 /* end landscape 500px */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CRITICAL FIXES  v2  —  applied to uploaded files
+   1. Checkers "Select Game Mode" modal bleed-through on page load
+   2. Tetris landscape layout overflow / boards off-screen
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════
+   FIX 1 — CHECKERS MODAL BLEED
+   .ck-hidden must be completely invisible even when position:fixed
+   escapes its display:none parent on Android Chrome.
+   ══════════════════════════════════════════════════════════════ */
+
+.ck-hidden {
+  display:        none !important;
+  visibility:     hidden !important;
+  opacity:        0 !important;
+  pointer-events: none !important;
+}
+
+/* Belt-and-suspenders: when the screen itself is hidden,
+   force every overlay panel off regardless of position:fixed */
+#screen-checkers.hidden .ck-overlay-panel,
+.hidden #ck-mode-panel,
+.hidden #ck-diff-panel,
+.hidden #ck-result-panel {
+  display:        none !important;
+  visibility:     hidden !important;
+  pointer-events: none !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   FIX 2 — TETRIS LANDSCAPE  (portrait: untouched)
+   Targets ONLY landscape phones with viewport height ≤ 520px.
+
+   Root causes fixed here:
+   A. The "🧱 TETRIS DUEL" heading wastes ~40px — hidden in landscape
+   B. #tetris-play flex-direction:column puts heading above boards,
+      eating vertical space — changed to row so heading is eliminated
+   C. Each player column stacks: label + stats + canvas + next-label
+      + next-canvas + key-hint — most of these hidden/shrunk
+   D. flex-wrap:wrap on #tetris-boards-row allows P2 to wrap below
+      viewport — forced nowrap
+   E. calcCell() min=16 forces canvas to 320px in a 360px vh —
+      fixed in tetris.js (min=10 in landscape)
+   ══════════════════════════════════════════════════════════════ */
+
+@media screen and (orientation: landscape) and (max-height: 520px) {
+
+  /* ── #tetris-play: strict flex column, fills fixed viewport ── */
+  #tetris-play {
+    display:        flex !important;
+    flex-direction: column !important;
+    overflow:       hidden !important;
+    padding:        0 !important;   /* inline style has padding:0; CSS confirms */
+    height:         100dvh !important;
+    max-height:     100dvh !important;
+    box-sizing:     border-box !important;
+  }
+
+  /* Compact topbar inside tetris play */
+  #tetris-play .dz-topbar {
+    flex-shrink:  0 !important;
+    min-height:   36px !important;
+    max-height:   40px !important;
+    padding:      4px 12px !important;
+    background:   rgba(7,8,15,0.95) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  }
+  #tetris-play .dz-topbar button {
+    font-size:  0.68rem !important;
+    padding:    3px 8px !important;
+    min-height: 28px !important;
+  }
+
+  /* ── HIDE the "🧱 TETRIS DUEL" heading — saves 40px ── */
+  #tetris-play > div[style*="text-align:center"],
+  #tetris-play > div[style*="text-align: center"] {
+    display: none !important;
+  }
+
+  /* ── Boards row: row direction, no wrap, fills remaining height ── */
+  #tetris-boards-row {
+    flex:            1 !important;
+    min-height:      0 !important;
+    display:         flex !important;
+    flex-direction:  row !important;
+    flex-wrap:       nowrap !important;
+    justify-content: center !important;
+    align-items:     flex-start !important;
+    gap:             6px !important;
+    padding:         2px 6px 2px !important;
+    width:           100% !important;
+    box-sizing:      border-box !important;
+    overflow:        hidden !important;
+  }
+
+  /* ── Each player column: fills half width, no overflow ── */
+  #tetris-p1-col,
+  #tetris-p2-col {
+    flex:            1 !important;
+    min-width:       0 !important;
+    max-width:       48vw !important;
+    display:         flex !important;
+    flex-direction:  column !important;
+    align-items:     center !important;
+    gap:             2px !important;
+    overflow:        hidden !important;
+  }
+
+  /* Player label (🔵 PLAYER 1 / 🔴 PLAYER 2) */
+  #tetris-p1-col > div:first-child,
+  #tetris-p2-col > div:first-child,
+  #tetris-p2-label {
+    font-size:    0.68rem !important;
+    white-space:  nowrap !important;
+    flex-shrink:  0 !important;
+    line-height:  1.2 !important;
+  }
+
+  /* Score/Lines/Level stats row */
+  #tetris-p1-col > div:nth-child(2),
+  #tetris-p2-col > div:nth-child(2) {
+    font-size: 0.58rem !important;
+    gap:       3px !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* ── Main canvas: CSS display constraint so it never overflows ── */
+  #tetris-canvas-p1,
+  #tetris-canvas-p2 {
+    max-width:        44vw !important;
+    /* topbar(~38px) + player-label(~16px) + stats(~14px) + next-label(~12px) +
+       next-canvas(36px) + gaps(~10px) = ~126px overhead */
+    max-height:       calc(100dvh - 38px - 16px - 14px - 12px - 36px - 10px) !important;
+    width:            auto !important;
+    height:           auto !important;
+    flex-shrink:      1 !important;
+    display:          block !important;
+    image-rendering:  pixelated !important;
+  }
+
+  /* "Next:" text label */
+  #tetris-p1-col > div[style*="0.7rem"],
+  #tetris-p2-col > div[style*="0.7rem"] {
+    font-size:  0.55rem !important;
+    flex-shrink: 0 !important;
+    line-height: 1 !important;
+  }
+
+  /* Next-piece preview canvas */
+  #tetris-next-p1,
+  #tetris-next-p2 {
+    width:       36px !important;
+    height:      36px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* P2 keyboard hint — hidden in landscape, space is too precious */
+  #tetris-p2-keys {
+    display: none !important;
+  }
+
+  /* Mobile touch controls strip — compact row */
+  #tetris-mobile-controls {
+    flex-shrink: 0 !important;
+    margin-top:  2px !important;
+    padding:     0 4px 2px !important;
+  }
+
+  /* Result overlay for landscape */
+  #tetris-result > div {
+    padding:   16px 20px !important;
+    max-width: min(320px, 90vw) !important;
+  }
+  #tetris-result-title {
+    font-size:     1.1rem !important;
+    margin-bottom: 6px !important;
+  }
+
+}
+/* end landscape 520px */
+
+
+/* ── Extra-short landscape (≤380px) — phones like older Androids ── */
+@media screen and (orientation: landscape) and (max-height: 380px) {
+
+  #tetris-play .dz-topbar {
+    min-height: 28px !important;
+    max-height: 32px !important;
+    padding:    2px 8px !important;
+  }
+
+  #tetris-canvas-p1,
+  #tetris-canvas-p2 {
+    max-height: calc(100dvh - 28px - 14px - 12px - 10px - 32px - 8px) !important;
+  }
+
+  #tetris-next-p1,
+  #tetris-next-p2 {
+    width:  28px !important;
+    height: 28px !important;
+  }
+
+}
+/* end landscape 380px */
+
+/* ── END CRITICAL FIXES v2 ── */
