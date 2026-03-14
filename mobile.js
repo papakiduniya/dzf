@@ -445,3 +445,29 @@
   window.DZMobile = { showWrapper: showWrapper, hideWrapper: hideWrapper, relocateControls: relocateControls, requestFS: requestFS, exitFS: exitFS, isFS: isFS, checkLandscapePrompt: checkLandscapePrompt };
 
 })();
+
+/* ── Tetris mobile key bridge ─────────────────────────────────────────────
+   Maps touch-button presses to synthetic KeyboardEvents so the Tetris
+   engine (which listens to document keydown) works on phones.
+
+   P1 controls: ArrowLeft / ArrowRight / ArrowDown / ArrowUp (rotate) / Space (drop)
+   P2 controls: A / D / S / W (rotate) / Q (drop)
+   ─────────────────────────────────────────────────────────────────────── */
+(function() {
+  var KEY_MAP = {
+    1: { left:'ArrowLeft', right:'ArrowRight', down:'ArrowDown', rotate:'ArrowUp',  drop:' '  },
+    2: { left:'a',         right:'d',          down:'s',         rotate:'w',        drop:'q'  }
+  };
+
+  window.tetrisMobileKey = function(player, action) {
+    var map = KEY_MAP[player];
+    if (!map || !map[action]) return;
+    var key = map[action];
+    var opts = { key: key, code: key, bubbles: true, cancelable: true };
+    document.dispatchEvent(new KeyboardEvent('keydown', opts));
+    // Short repeat for held-down feel (down/left/right)
+    if (action === 'down' || action === 'left' || action === 'right') {
+      setTimeout(function() { document.dispatchEvent(new KeyboardEvent('keydown', opts)); }, 80);
+    }
+  };
+})();
