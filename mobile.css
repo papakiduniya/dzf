@@ -1128,12 +1128,15 @@
          this CSS is the fallback when that API is unavailable.
    ══════════════════════════════════════════════════════════════ */
 
-/* The overlay element itself — hidden by default, shown via JS */
+/* ── Portrait-only lock: overlay hidden in portrait, shown in landscape ──
+   Pure CSS — no JS class toggle needed. Works even if JS is slow/blocked.
+   The #dz-portrait-lock element is always in the DOM; CSS shows/hides it. */
+
 #dz-portrait-lock {
-  display: none;
+  display: none;           /* hidden in portrait by default */
   position: fixed;
   inset: 0;
-  z-index: 2147483647; /* max possible z-index — sits above everything */
+  z-index: 2147483647;     /* max z-index — above every canvas/panel */
   background: #07080f;
   flex-direction: column;
   align-items: center;
@@ -1142,20 +1145,28 @@
   text-align: center;
   padding: 32px 24px;
   box-sizing: border-box;
+  pointer-events: all;     /* block all touch/click through to game */
 }
 
+/* JS hook — kept for backwards compat but CSS media query is authoritative */
 #dz-portrait-lock.active {
   display: flex;
 }
 
-/* CSS-level fallback: on coarse-pointer (touch) landscape,
-   freeze scrolling and show the lock via the .active class
-   even if JS hasn't fired yet */
-@media (pointer: coarse) and (orientation: landscape) {
+/* ── PRIMARY LOCK: pure CSS, fires on any device in landscape ── */
+@media (orientation: landscape) {
+  #dz-portrait-lock {
+    display: flex !important;  /* show regardless of .active class */
+  }
   html, body {
-    /* Prevent the game canvas from scrolling into view in landscape */
     overflow: hidden !important;
     max-height: 100vh !important;
+    touch-action: none !important; /* block scroll/zoom behind overlay */
+  }
+  /* Freeze all canvas elements so they can't paint behind the lock */
+  canvas {
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 }
 

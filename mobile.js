@@ -330,27 +330,27 @@
 
   window.addEventListener('resize', function() { scaleCanvases(); scaleDpad(); });
 
-  /* ── Portrait-lock: pause all game loops when device goes landscape ──
-     The HTML portrait-lock overlay covers the screen visually, but
-     position:fixed game panels (tetris-play, rd-play, etc.) can still
-     render at landscape dimensions during the orientation transition.
-     Suspending all audio contexts and dispatching DZ_PAUSED stops any
-     active game loop from advancing frames behind the overlay. */
+  /* ── Portrait-only lock: kill all game loops on landscape, never auto-resume ──
+     CSS already blocks rendering via @media (orientation: landscape) { canvas { visibility:hidden } }
+     This JS layer hard-stops every RAF/timer loop so nothing runs in the background. */
   window.addEventListener('orientationchange', function () {
     setTimeout(function () {
       scaleCanvases();
       scaleDpad();
       var isLandscape = window.innerWidth > window.innerHeight;
       if (isLandscape) {
-        /* Signal all game loops to pause */
+        /* Landscape — kill everything */
         window.DZ_PAUSED = true;
         if (typeof dzSuspendAllAudio === 'function') dzSuspendAllAudio();
+        if (typeof window.dzPauseAllGames === 'function') {
+          try { window.dzPauseAllGames(); } catch(e) {}
+        }
       } else {
-        /* Back to portrait — resume */
+        /* Back to portrait — clear flag ONLY. Do NOT call dzResumeAllAudio()
+           or restart any game loop. User must press ▶ START to play again.
+           Auto-resuming here was the root cause of Tetris playing randomly. */
         window.DZ_PAUSED = false;
-        if (typeof dzResumeAllAudio === 'function') dzResumeAllAudio();
       }
-      /* Let the HTML orientation script update the lock overlay */
       if (typeof window.dzCheckOrientation === 'function') window.dzCheckOrientation();
     }, 150);
   });
