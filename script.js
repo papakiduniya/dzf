@@ -4,6 +4,43 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ─────────────────────────────────────────────────────────────
+// GLOBAL AUDIO CONTEXT TRACKER
+// Patches window.AudioContext so every instance — including
+// those created by external game files (tetris.js, reaction.js,
+// pingpong.js, etc.) — is tracked in one array.
+// dzSuspendAllAudio() / dzResumeAllAudio() then work on ALL
+// sounds site-wide, not just SoundManager.
+// ─────────────────────────────────────────────────────────────
+window._DZ_AUDIO_CONTEXTS = [];
+window.DZ_PAUSED = false; // global flag; external game loops should check this
+
+(function() {
+  var _Orig = window.AudioContext || window.webkitAudioContext;
+  if (!_Orig) return;
+  function PatchedAudioContext(opts) {
+    // Explicitly returning an object from a constructor replaces `this` in JS
+    var inst;
+    try { inst = opts ? new _Orig(opts) : new _Orig(); } catch(e) { inst = new _Orig(); }
+    window._DZ_AUDIO_CONTEXTS.push(inst);
+    return inst;
+  }
+  PatchedAudioContext.prototype = _Orig.prototype;
+  window.AudioContext = PatchedAudioContext;
+  if (window.webkitAudioContext) window.webkitAudioContext = PatchedAudioContext;
+})();
+
+function dzSuspendAllAudio() {
+  window._DZ_AUDIO_CONTEXTS.forEach(function(c) {
+    try { if (c && c.state === 'running') c.suspend(); } catch(e) {}
+  });
+}
+function dzResumeAllAudio() {
+  window._DZ_AUDIO_CONTEXTS.forEach(function(c) {
+    try { if (c && c.state === 'suspended') c.resume(); } catch(e) {}
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
 // SECTION A: Screen Switching
 //
 // How it works:
@@ -31,6 +68,9 @@ var screenPB       = document.getElementById('screen-passbreach');
 var screenChess        = document.getElementById('screen-chess');
 var screenBattleship   = document.getElementById('screen-battleship');
 var screenCheckers     = document.getElementById('screen-checkers');
+// Module-level handle for the ad-interstitial countdown so rapid showHub() calls
+// don't stack multiple simultaneous intervals
+var _hubAdTick = null;
 var screenDarts        = document.getElementById('screen-darts');
 var screenTanks        = document.getElementById('screen-tanks');
 var screenStarCatcher  = document.getElementById('screen-starcatcher');
@@ -56,6 +96,9 @@ function hideAllScreens() {
 }
 
 function showHub() {
+  // FIX: stop every running game loop/timer/sound before doing anything else
+  if (typeof dzStopAllGames === 'function') dzStopAllGames();
+
   // Hide all fixed play panels and back buttons (position:fixed elements escape parent hide)
   ['mine-play','tetris-play','bm-play','rd-play',
    'tw-play','sdk-play','carrom-play','ludo-play'].forEach(function(id) {
@@ -82,14 +125,16 @@ function showHub() {
     document.body.scrollTop = 0;
   };
   if (adOverlay) {
+    // Cancel any already-running countdown (rapid double-click protection)
+    if (_hubAdTick) { clearInterval(_hubAdTick); _hubAdTick = null; }
     adOverlay.style.display = 'flex';
     if (countdown) countdown.textContent = '3';
     var _secs = 3;
-    var _tick = setInterval(function() {
+    _hubAdTick = setInterval(function() {
       _secs--;
       if (countdown) countdown.textContent = _secs;
       if (_secs <= 0) {
-        clearInterval(_tick);
+        clearInterval(_hubAdTick); _hubAdTick = null;
         _doShowHub();
       }
     }, 1000);
@@ -129,6 +174,9 @@ function show2048() {
 function showC4() {
   hideAllScreens();
   screenC4.classList.remove('hidden');
+  // Stop any in-progress game before returning to home
+  c4GameActive = false;
+  if (c4BoardWrap) c4BoardWrap.classList.add('locked');
   var c4HomeEl = document.getElementById('c4-home');
   var c4PlayEl = document.getElementById('c4-play-panel');
   if (c4HomeEl) { c4HomeEl.classList.remove('hidden'); }
@@ -771,6 +819,7 @@ hubCards.forEach(function(card) {
 
   card.addEventListener('click', function(evt) {
     if (overlay.classList.contains('active')) return;
+    if (evt.target.closest('.card-setup-btn')) return;
     if (evt.target.closest('.card-save-btn'))  return;
 
     var gameName    = card.getAttribute('data-game');
@@ -781,9 +830,6 @@ hubCards.forEach(function(card) {
 
     // Track recently played
     if (game) dzTrackRecentGame(gameName, game.screen, accentColor);
-
-    // Show Hub & Setup in dropdown menu when in-game
-    if (game && window.dzSetInGame) window.dzSetInGame(game.screen);
 
     // Route to correct screen
     if (game && game.screen === 'ttt')        { showTTT();     return; }
@@ -847,6 +893,7 @@ var tttMark        = 'X';
 var tttActive      = true;
 var tttScores      = { X:0, O:0 };
 var tttNames       = { X:'Player 1', O:'Player 2' };
+var tttBotTimeout  = null;  // handle for pending bot think setTimeout
 
 var tttWinPatterns = [
   [0,1,2],[3,4,5],[6,7,8],
@@ -938,11 +985,8 @@ function ttFindWin(mark){
 }
 function tttBotEasy(){var e=tttEmpty();return e[Math.floor(Math.random()*e.length)];}
 function tttBotMed(){
-  var w=ttFindWin('O'); if(w!==-1) return w;   // win if possible
-  var b=ttFindWin('X'); if(b!==-1) return b;   // block X from winning
-  // Prefer centre, then corners, then edges
-  var prio=[4,0,2,6,8,1,3,5,7];
-  for(var i=0;i<prio.length;i++){ if(tttBoard[prio[i]]==='') return prio[i]; }
+  var w=ttFindWin('O'); if(w!==-1) return w; // win if possible
+  var b=ttFindWin('X'); if(b!==-1) return b; // block player's winning move
   return tttBotEasy();
 }
 function tttMinimax(isMax, depth, alpha, beta) {
@@ -952,15 +996,11 @@ function tttMinimax(isMax, depth, alpha, beta) {
   if (xWin) return depth - 10;
   var empty = tttEmpty();
   if (!empty.length) return 0;
-  // FIX: declare best/s/i once at function scope — avoids ES5 var-hoisting bug
-  // where 'var best = Infinity' in the else branch was silently a no-op,
-  // because hoisting merged both declarations into one (initialized to undefined).
-  var best, s, i;
   if (isMax) {
-    best = -Infinity;
-    for (i = 0; i < empty.length; i++) {
+    var best = -Infinity;
+    for (var i = 0; i < empty.length; i++) {
       tttBoard[empty[i]] = 'O';
-      s = tttMinimax(false, depth + 1, alpha, beta);
+      var s = tttMinimax(false, depth + 1, alpha, beta);
       tttBoard[empty[i]] = '';
       if (s > best) best = s;
       if (s > alpha) alpha = s;
@@ -968,10 +1008,10 @@ function tttMinimax(isMax, depth, alpha, beta) {
     }
     return best;
   } else {
-    best = Infinity;
-    for (i = 0; i < empty.length; i++) {
+    var best = Infinity;
+    for (var i = 0; i < empty.length; i++) {
       tttBoard[empty[i]] = 'X';
-      s = tttMinimax(true, depth + 1, alpha, beta);
+      var s = tttMinimax(true, depth + 1, alpha, beta);
       tttBoard[empty[i]] = '';
       if (s < best) best = s;
       if (s < beta) beta = s;
@@ -1036,7 +1076,8 @@ function tttTriggerBot(){
   tttBoardEl.classList.add('disabled');
   var lbl=tttDifficulty.charAt(0).toUpperCase()+tttDifficulty.slice(1);
   tttStatus.textContent='Bot is thinking… ('+lbl+')'; tttStatus.className='thinking';
-  setTimeout(function(){
+  tttBotTimeout = setTimeout(function(){
+    tttBotTimeout = null;
     if(!tttActive)return;
     var idx=tttBotMove(); if(idx===undefined||idx===-1)return;
     tttBoardEl.classList.remove('disabled');
@@ -1060,6 +1101,8 @@ function tttClick(e){
 
 // Restart  ← also called by showTTT() on each entry from hub
 function tttRestart(){
+  // Cancel any pending bot think so it can't place on the freshly cleared board
+  if(tttBotTimeout){ clearTimeout(tttBotTimeout); tttBotTimeout = null; }
   tttBoard=['','','','','','','','',''];
   tttMark='X'; tttActive=true;
   tttStatus.textContent=tttNames['X']+"'s Turn"; tttStatus.className='';
@@ -1228,7 +1271,7 @@ function rpsRevealChoices(p1c, p2c) {
 }
 
 function rpsHandleP1Pick(choice) {
-  if (rpsLocked) return;
+  if (rpsLocked || rpsAwaitingP2) return;
   SoundManager.rpsSelect();
   rpsLastP1 = choice;
   rpsHistory.push(choice);
@@ -1267,6 +1310,13 @@ function rpsRestart() {
   rpsBtnsP1El.classList.remove('hidden');
   rpsBtnsP2El.classList.add('hidden');
   rpsPickPrompt.textContent = (rpsMode === 'pvp') ? 'Player 1 — Choose your weapon!' : 'Choose your weapon!';
+  // Re-sync Best Of button highlight (may be out of sync if restarted mid-match)
+  var boMap = {3:'rps-bo3', 5:'rps-bo5', 7:'rps-bo7'};
+  ['rps-bo3','rps-bo5','rps-bo7'].forEach(function(id){ var el=document.getElementById(id); if(el) el.classList.remove('active'); });
+  var activeBoId = boMap[rpsBestOf];
+  if (activeBoId) { var el = document.getElementById(activeBoId); if (el) el.classList.add('active'); }
+  // Sync BO counter display
+  if (rpsBoNumEl) rpsBoNumEl.textContent = rpsBestOf;
   // Hide in-game settings during active play
   var rpsApp = document.getElementById('rps-app');
   if (rpsApp) rpsApp.classList.add('rps-game-active');
@@ -1357,8 +1407,8 @@ var tapHintP2El     = document.getElementById('tap-hint-p2');
 var tapModeLabel    = document.getElementById('tap-mode-label');
 
 function tapStop() {
-  clearInterval(tapBotInterval); tapBotInterval = null;
-  clearInterval(tapCountTimer);  tapCountTimer  = null;
+  clearInterval(tapBotInterval); clearTimeout(tapBotInterval); tapBotInterval = null;
+  clearInterval(tapCountTimer);  clearTimeout(tapCountTimer);  tapCountTimer  = null;
   tapActive = false; tapCountdown = false;
 }
 
@@ -1525,6 +1575,7 @@ var d2048Active  = [true, true];
 var d2048TileId  = 0;
 var d2048Locked  = [false, false]; // true while animation is running
 var d2048BotTimer = null;
+var d2048Gen     = 0;  // incremented on every init; stale animation callbacks compare against this
 
 // ── DOM refs ───────────────────────────────────────────────────
 var d2048StatusEl   = document.getElementById('d2048-status');
@@ -1687,6 +1738,7 @@ function d2048ComputeMove(pIdx, dir) {
 function d2048DoMove(pIdx, dir, onDone) {
   if (d2048Locked[pIdx] || !d2048Active[pIdx]) return false;
 
+  var myGen = d2048Gen;  // capture current generation; if d2048Init runs before callback fires, gen changes
   var comp = d2048ComputeMove(pIdx, dir);
 
   if (!comp.changed) {
@@ -1727,6 +1779,8 @@ function d2048DoMove(pIdx, dir, onDone) {
 
   // After animation: commit merges, spawn new tile, check win/loss
   setTimeout(function() {
+    // Abort if game was restarted/reset while animation was in flight
+    if (d2048Gen !== myGen) return;
     // Remove merge source tiles from state + DOM
     comp.merges.forEach(function(m) {
       [m.srcA, m.srcB].forEach(function(id) {
@@ -1765,7 +1819,7 @@ function d2048DoMove(pIdx, dir, onDone) {
     // Check WIN (reached 2048 or higher)
     if (maxTile >= 2048) {
       d2048Active[pIdx] = false;
-      clearInterval(d2048BotTimer); d2048BotTimer = null;
+      clearInterval(d2048BotTimer); clearTimeout(d2048BotTimer); d2048BotTimer = null;
       var wName = pIdx === 0 ? 'Player 1' : (d2048Mode === 'pve' ? 'Bot' : 'Player 2');
       d2048ShowWin(wName, 'Reached ' + maxTile + '! · Score: ' + d2048Scores[pIdx]);
       d2048Locked[pIdx] = false;
@@ -1778,7 +1832,7 @@ function d2048DoMove(pIdx, dir, onDone) {
     // Check GAME OVER (no valid moves left)
     if (!d2048CanMove(pIdx)) {
       d2048Active[pIdx] = false;
-      clearInterval(d2048BotTimer); d2048BotTimer = null;
+      clearInterval(d2048BotTimer); clearTimeout(d2048BotTimer); d2048BotTimer = null;
       var loserName  = pIdx === 0 ? 'Player 1' : (d2048Mode === 'pve' ? 'Bot' : 'Player 2');
       var winnerName = pIdx === 0 ? (d2048Mode === 'pve' ? 'Bot' : 'Player 2') : 'Player 1';
       d2048ShowWin(winnerName, loserName + '\'s board is full · Score: ' + d2048Scores[1 - pIdx]);
@@ -1793,6 +1847,7 @@ function d2048DoMove(pIdx, dir, onDone) {
   return true;
 }
 
+// d2048CanMove — correctly checks if the player has any valid move left
 function d2048CanMove(pIdx) {
   var grid = [[null,null,null,null],[null,null,null,null],[null,null,null,null],[null,null,null,null]];
   d2048Tiles[pIdx].forEach(function(t) { grid[t.row][t.col] = t.value; });
@@ -2049,8 +2104,9 @@ function d2048StartSimBot() {
 // ── Init ────────────────────────────────────────────────────────
 function d2048Init() {
   clearInterval(d2048BotTimer);
-  clearTimeout(d2048BotTimer);
+  clearTimeout(d2048BotTimer);  // clear before nulling so any pending pve timeout is cancelled
   d2048BotTimer = null;
+  d2048Gen++;  // invalidate any in-flight animation callbacks from the previous session
 
   d2048Tiles      = [[], []];
   d2048Scores     = [0, 0];
@@ -2397,6 +2453,13 @@ function cricEndInnings() {
     cricPlayBNum.textContent = '?';
     cricPlayResult.textContent = '🔁 Innings over — ' + cricBatterName() + ' bats now!';
     if (cricIsPvP) {
+      // Hide all PvP pass-screen panels so cricPvpResetBall starts from a clean state
+      var pp1  = document.getElementById('cric-pvp-pp1');
+      var pass = document.getElementById('cric-pvp-pp-pass');
+      var pp2  = document.getElementById('cric-pvp-pp2');
+      if (pp1)  pp1.classList.add('hidden');
+      if (pass) pass.classList.add('hidden');
+      if (pp2)  pp2.classList.add('hidden');
       setTimeout(function() {
         cricPlayResult.textContent = '—';
         cricPvpResetBall();
@@ -2462,6 +2525,8 @@ function cricHandlePlay(playerNum) {
   cricNumPop(cricPlayPNum);
 
   setTimeout(function() {
+    // Abort if player navigated away from cricket screen during the reveal delay
+    if (screenCricket && screenCricket.classList.contains('hidden')) return;
     cricPlayBNum.textContent = botNum;
     cricNumPop(cricPlayBNum);
 
@@ -3171,12 +3236,12 @@ show2048 = function() {
 };
 
 document.getElementById('d2048-home-back').addEventListener('click', function(){
-  clearInterval(d2048BotTimer); d2048BotTimer = null;
+  clearInterval(d2048BotTimer); clearTimeout(d2048BotTimer); d2048BotTimer = null;
   showHub();
 });
 document.getElementById('d2048-hp-start').addEventListener('click', startD2048Game);
 document.getElementById('d2048-back-to-home').addEventListener('click', function(){
-  clearInterval(d2048BotTimer); d2048BotTimer = null;
+  clearInterval(d2048BotTimer); clearTimeout(d2048BotTimer); d2048BotTimer = null;
   showD2048Home();
 });
 
@@ -3471,16 +3536,9 @@ function c4UpdateGhostDisc(hoveredCol) {
 function c4BotDrop(col) {
   // Bot bypass: skip the pve+P2 guard since this IS the bot turn
   if (!c4GameActive) return;
-  if (col < 0 || col >= C4_COLS) return;
+  if (col === undefined || col === null || col < 0 || col >= C4_COLS) return;
   var row = c4GetNextOpenRow(c4Board, col);
-  if (row === -1) {
-    // Bot returned a full column — pick any valid column instead of resetting the whole game
-    var fallback = c4GetValidColumns(c4Board);
-    if (!fallback.length) { c4EndGame(null, null); return; }
-    col = fallback[Math.floor(Math.random() * fallback.length)];
-    row = c4GetNextOpenRow(c4Board, col);
-    if (row === -1) return; // should never happen
-  }
+  if (row === -1) return; // FIX: invalid column — skip move instead of wiping scores with c4ResetGame()
   c4Board[row][col] = c4CurrentPlayer;
   c4RenderCell(row, col, c4CurrentPlayer, true);
   SoundManager.c4Drop();
@@ -3750,6 +3808,9 @@ function ahStopLoop() {
   ahRunning = false;
   if (ahRAF) { cancelAnimationFrame(ahRAF); ahRAF = null; }
   window.removeEventListener('resize', ahResize);
+  // Reset all key states so a held key can't cause drift in the next session
+  ahPaddles[0].key = { up:false, dn:false, lt:false, rt:false };
+  ahPaddles[1].key = { up:false, dn:false, lt:false, rt:false };
 }
 
 function ahResize() {
@@ -4095,6 +4156,9 @@ function ahUpdatePips(id, score, total, color) {
 var ahLastTime = 0;
 function ahLoop(ts) {
   if (!ahRunning) return;
+
+  // Honour global pause flag (hamburger menu open, etc.)
+  if (window.DZ_PAUSED) { ahLastTime = ts; ahRAF = requestAnimationFrame(ahLoop); return; }
 
   // Reset timing when tab was hidden to prevent physics explosion on resume
   if (document.hidden) { ahLastTime = ts; ahRAF = requestAnimationFrame(ahLoop); return; }
@@ -4822,7 +4886,7 @@ function pbSubmitGuess() {
   document.getElementById('pb-attempts-val').textContent = pb.attempts;
 
   var feedback = pbGetFeedback(guess, pb.secret);
-  pb.guessHistory.push({ guess: guess, feedback: feedback });
+  pb.guessHistory.push({ guess: guess, feedback: feedback }); // FIX: populate so pbGiveHint can detect already-found positions
   pbRenderRow(guess, feedback, pb.attempts);
 
   // Play sounds based on feedback
@@ -5010,7 +5074,8 @@ function pbStartGame() {
     var el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('click', function() {
-      document.querySelectorAll('[data-diff]').forEach(function(b){ b.classList.remove('active'); });
+      // Scoped selector — only affect PB's own difficulty buttons
+      document.querySelectorAll('#pb-home [data-diff]').forEach(function(b){ b.classList.remove('active'); });
       this.classList.add('active');
       pb.diff = this.getAttribute('data-diff');
     });
@@ -5048,7 +5113,7 @@ function pbStartGame() {
         }
         return;
       }
-      // Digit — only add if no repeat
+      // Digit — only add if no repeat and not full
       if (pb.currentInput.length < 4 && pb.currentInput.indexOf(val) === -1) {
         pb.currentInput += val;
         pbUpdateCells();
@@ -5057,8 +5122,8 @@ function pbStartGame() {
         var k = this;
         k.classList.add('pb-numpad-press');
         setTimeout(function(){ k.classList.remove('pb-numpad-press'); }, 120);
-      } else if (pb.currentInput.indexOf(val) !== -1) {
-        // Shake: digit already used
+      } else if (pb.currentInput.indexOf(val) !== -1 || pb.currentInput.length >= 4) {
+        // Shake: digit already used OR input full — give feedback either way
         var k = this;
         k.classList.add('pb-numpad-shake');
         setTimeout(function(){ k.classList.remove('pb-numpad-shake'); }, 300);
@@ -5080,7 +5145,7 @@ function pbStartGame() {
         pb.currentInput += e.key;
         pbUpdateCells();
         SoundManager.pbKeyPress();
-      } else if (pb.currentInput.indexOf(e.key) !== -1) {
+      } else if (pb.currentInput.indexOf(e.key) !== -1 || pb.currentInput.length >= 4) {
         SoundManager.pbWrong();
       }
     } else if (e.key === 'Backspace') {
@@ -5180,6 +5245,7 @@ var mfdState = {
   gameOver:       false,
   totalPairs:     8,
   botTimeout:     null,
+  gen:            0,      // incremented on every new game; stale evaluate callbacks compare against this
   // Bot memory: map of cardIndex -> pairValue (for extreme bot - perfect memory)
   botMemory:      {},
   botSeenPairs:   {},     // pairValue -> [idx1, idx2] if both seen (extreme)
@@ -5338,7 +5404,8 @@ function mfdOnCardClick(idx) {
   if (mfdState.flipped.length === 2) {
     mfdState.locked = true;
     mfdUpdateActivePlayer();
-    setTimeout(mfdEvaluate, 500);
+    var _evalGen = mfdState.gen;
+    setTimeout(function() { if (mfdState.gen === _evalGen) mfdEvaluate(); }, 500);
   }
 }
 
@@ -5604,7 +5671,8 @@ function mfdExecuteBotMove() {
     mfdState.flipped.push(idx2);
     // Evaluate after 2nd flip
     mfdState.locked = true;
-    setTimeout(mfdEvaluate, 500);
+    var _botEvalGen = mfdState.gen;
+    setTimeout(function() { if (mfdState.gen === _botEvalGen) mfdEvaluate(); }, 500);
   }, 550);
 }
 
@@ -5613,6 +5681,7 @@ function mfdStartGame(preserveScores) {
   // Stop any running bot
   if (mfdState.botTimeout) { clearTimeout(mfdState.botTimeout); mfdState.botTimeout = null; }
 
+  mfdState.gen++;  // invalidate any in-flight evaluate or bot timeouts from the previous round
   mfdState.cards         = mfdBuildDeck();
   mfdState.flipped       = [];
   mfdState.scores        = preserveScores ? mfdState.scores : [0, 0];
@@ -5935,12 +6004,19 @@ var GameLoader = (function() {
     return _activeId;
   }
 
+  /** Destroy the active game WITHOUT navigating — used by dzNavShowHome which
+   *  handles its own hub transition to avoid triggering the ad interstitial twice. */
+  function destroyActive() {
+    _destroyActive();
+  }
+
   // Expose public interface
   return {
     registerGame:      registerGame,
     openGame:          openGame,
     resetCurrentGame:  resetCurrentGame,
     closeCurrentGame:  closeCurrentGame,
+    destroyActive:     destroyActive,
     getActiveGameId:   getActiveGameId
   };
 
@@ -6497,7 +6573,8 @@ var GlobalBotEngine = (function() {
     },
     reset:  function() { tttRestart(); },
     destroy: function() {
-      // TTT has no async loops; just mark board inactive
+      // Cancel any pending bot think and mark board inactive
+      if (tttBotTimeout) { clearTimeout(tttBotTimeout); tttBotTimeout = null; }
       tttActive = false;
       tttBoardEl && tttBoardEl.classList.add('disabled');
     }
@@ -6800,7 +6877,6 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     difficulty:     'easy',
     gameOver:       false,
     botThinking:    false,
-    gridSize:       3,      // 3=3x3 boxes (4x4 dots), 5=5x5 boxes, 10=10x10 boxes
     totalLines:     24,
     drawnLines:     0
   };
@@ -6887,20 +6963,6 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     }
   });
 
-  // Start game
-  // Grid Size buttons (3x3, 5x5, 10x10)
-  var cddGridBtns = document.querySelectorAll('.cdd-grid-size-btn');
-  if (cddGridBtns.length) {
-    cddGridBtns.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        cddGridBtns.forEach(function(b) { b.classList.remove('active'); });
-        btn.classList.add('active');
-        cdd.gridSize = parseInt(btn.dataset.gridsize, 10) || 3;
-        SoundManager.click();
-      });
-    });
-  }
-
   if (cddHpStart) {
     cddHpStart.addEventListener('click', function() {
       SoundManager.click();
@@ -6933,8 +6995,6 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
       GameLoader.closeCurrentGame();
     });
   }
-
-  // Result overlay buttons
   if (cddPlayAgain) {
     cddPlayAgain.addEventListener('click', function() {
       SoundManager.click();
@@ -7004,27 +7064,24 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
   // ── Data Structures ─────────────────────────────────────────
 
   function cddBuildData() {
-    var G = cdd.gridSize; // number of boxes per side
-    // Horizontal lines: h-{row}-{col}, row=0..G, col=0..G-1
-    for (var r = 0; r <= G; r++) {
-      for (var c = 0; c <= G-1; c++) {
+    // Horizontal lines: h-{row}-{col}, row=0..3, col=0..2
+    for (var r = 0; r <= 3; r++) {
+      for (var c = 0; c <= 2; c++) {
         var hid = 'h-' + r + '-' + c;
         cdd.lines[hid] = {id: hid, type: 'h', row: r, col: c, isDrawn: false, owner: null};
       }
     }
-    // Vertical lines: v-{row}-{col}, row=0..G-1, col=0..G
-    for (var r = 0; r <= G-1; r++) {
-      for (var c = 0; c <= G; c++) {
+    // Vertical lines: v-{row}-{col}, row=0..2, col=0..3
+    for (var r = 0; r <= 2; r++) {
+      for (var c = 0; c <= 3; c++) {
         var vid = 'v-' + r + '-' + c;
         cdd.lines[vid] = {id: vid, type: 'v', row: r, col: c, isDrawn: false, owner: null};
       }
     }
-    // Update totalLines
-    cdd.totalLines = (G+1)*G + G*(G+1); // H lines + V lines
 
-    // Boxes: box-{row}-{col}, row=0..G-1, col=0..G-1
-    for (var r = 0; r <= G-1; r++) {
-      for (var c = 0; c <= G-1; c++) {
+    // Boxes: box-{row}-{col}, row=0..2, col=0..2
+    for (var r = 0; r <= 2; r++) {
+      for (var c = 0; c <= 2; c++) {
         var bid = 'box-' + r + '-' + c;
         cdd.boxes[bid] = {
           id: bid, row: r, col: c,
@@ -7057,41 +7114,25 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     if (!cddGrid) return;
     cddGrid.innerHTML = '';
     cddGrid.classList.remove('locked');
-    var G = cdd.gridSize;
-    var totalCells = (G * 2 + 1); // dots + lines alternating
 
-    // ── Compute sizes that always fit the screen ──────────────
-    // DOT: fixed small size for the dot rows/columns
-    var DOT = 10;
-    // Available width: container width minus padding (2×8px), capped at max-width
-    var availW = Math.min((cddGrid.parentElement ? cddGrid.parentElement.clientWidth - 16 : window.innerWidth - 32), 516);
-    // Available height: grid-wrap height minus padding
-    var wrapEl = document.getElementById('cdd-grid-wrap');
-    var availH = wrapEl ? wrapEl.clientHeight - 16 : availW;
-    // CELL: fit both width and height
-    var CELL_W = Math.floor((availW - (G + 1) * DOT) / G);
-    var CELL_H = Math.floor((availH - (G + 1) * DOT) / G);
-    var CELL = Math.min(CELL_W, CELL_H);
-    if (G <= 3) CELL = Math.min(CELL, 88);
-    if (G <= 5) CELL = Math.min(CELL, 68);
-    CELL = Math.max(CELL, 24);
-    // Expose sizes as CSS custom properties so CSS rules can read them
+    // Fixed 7×7 grid for 4×4 dots / 3×3 boxes
+    var DOT  = 12;
+    var availW = Math.min(window.innerWidth - 32, 520);
+    var CELL = Math.floor((availW - 4 * DOT) / 3);
+    CELL = Math.min(CELL, 92);
+    CELL = Math.max(CELL, 28);
+
     cddGrid.style.setProperty('--cdd-dot-sz',  DOT  + 'px');
     cddGrid.style.setProperty('--cdd-cell-sz', CELL + 'px');
 
-    // Build alternating column/row template: DOT CELL DOT CELL ... DOT
-    var trackList = [];
-    for (var t = 0; t < totalCells; t++) {
-      trackList.push(t % 2 === 0 ? DOT + 'px' : CELL + 'px');
-    }
-    var tpl = trackList.join(' ');
+    var tpl = [DOT, CELL, DOT, CELL, DOT, CELL, DOT].map(function(v){ return v + 'px'; }).join(' ');
     cddGrid.style.gridTemplateColumns = tpl;
     cddGrid.style.gridTemplateRows    = tpl;
 
-    for (var vi = 0; vi < totalCells; vi++) {
-      for (var vj = 0; vj < totalCells; vj++) {
+    for (var vi = 0; vi <= 6; vi++) {
+      for (var vj = 0; vj <= 6; vj++) {
         var el;
-        var ri = vi % 2, rj = vj % 2; // 0=even, 1=odd
+        var ri = vi % 2, rj = vj % 2;
 
         if (ri === 0 && rj === 0) {
           // DOT
@@ -7144,16 +7185,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
   }
 
   function cddSetLineClickHandler(el, lid) {
-    // touchend fires before click — handle it and flag so click doesn't double-fire
-    var _touchFired = false;
-    el.addEventListener('touchend', function(e) {
-      e.preventDefault(); // prevent synthesised mouse click
-      _touchFired = true;
-      cddOnLineClick(lid);
-      setTimeout(function() { _touchFired = false; }, 500);
-    }, { passive: false });
     el.addEventListener('click', function() {
-      if (_touchFired) return; // already handled by touchend
       cddOnLineClick(lid);
     });
     el.addEventListener('keydown', function(e) {
@@ -7198,15 +7230,15 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     // Check box completion
     var boxesClaimed = cddCheckBoxes(player);
 
-    // ── Check game over FIRST, before any turn-switch or bot schedule ──
+    // Check game over FIRST — before scheduling any bot move
     if (cdd.drawnLines >= cdd.totalLines) {
-      if (boxesClaimed > 0) cddUpdateScores(); // commit final box claims to display
+      cddUpdateScores();
       cddEndGame();
       return;
     }
 
     if (boxesClaimed > 0) {
-      // Player keeps turn (claimed at least one box)
+      // Player keeps turn
       cddUpdateScores();
       if (cdd.gameOver) return;
       SoundManager.gameStart(); // box completion sound
@@ -7409,7 +7441,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
 
   // ── Register GlobalBotEngine strategy ────────────────────────
 
-  GlobalBotEngine.registerStrategy('connectdots', function(difficulty, state, mem) {
+  GlobalBotEngine._strategies['connectdots'] = function(difficulty, state, mem) {
     var available = state.availableLines;
     if (!available || !available.length) return null;
 
@@ -7510,7 +7542,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     });
 
     return bestLine || available[Math.floor(Math.random() * available.length)];
-  });
+  };
 
   // ── GameLoader Registration ───────────────────────────────────
 
@@ -7519,27 +7551,6 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     containerId: 'screen-connectdots',
     init: function() {
       // All wiring is done at parse time above
-      // Re-render grid on resize/orientation change
-      window.addEventListener('resize', function() {
-        if (!cdd.gameOver && document.getElementById('cdd-play') && !document.getElementById('cdd-play').classList.contains('hidden')) {
-          cddRenderGrid();
-          // Restore drawn lines and completed boxes visually
-          Object.keys(cdd.lines).forEach(function(lid) {
-            var ln = cdd.lines[lid];
-            if (!ln.isDrawn) return;
-            var el = cddGrid && cddGrid.querySelector('[data-lineid="' + lid + '"]');
-            if (el) {
-              el.classList.add('drawn');
-              el.classList.add(ln.owner === 'p1' ? 'drawn-p1' : 'drawn-p2');
-            }
-          });
-          Object.keys(cdd.boxes).forEach(function(bid) {
-            var box = cdd.boxes[bid];
-            if (!box.isCompleted) return;
-            cddAnimateBox(bid, box.owner);
-          });
-        }
-      });
     },
     start: function() {
       // Show home/setup panel
@@ -7553,6 +7564,10 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
       cddDestroyGame();
     }
   });
+
+  // Expose destroy globally so dzPauseAllGames() can cancel the bot timer
+  // even though cdd lives inside this IIFE closure
+  window.cddDestroyGame = cddDestroyGame;
 
   console.log('[DuelZone] Connect Dots Duel loaded and registered.');
 
@@ -7728,6 +7743,108 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
 
 var _dzMenuOpen = false;
 
+// ═══════════════════════════════════════════════════════════
+// CENTRAL GAME STOP / PAUSE
+// ─────────────────────────────────────────────────────────
+// dzPauseAllGames() — pauses all running game loops so no
+//   sound or movement continues while the menu is open.
+//   Called every time the in-game menu opens.
+//
+// dzStopAllGames() — fully tears down every loop/timer.
+//   Called when navigating back to the hub.
+// ═══════════════════════════════════════════════════════════
+
+function dzPauseAllGames() {
+  // ── 1. SILENCE ALL AUDIO IMMEDIATELY ──────────────────────────
+  // Suspends every AudioContext in the page — covers SoundManager,
+  // ahAudio, pbAudio, and any context from external .js files.
+  dzSuspendAllAudio();
+
+  // ── 2. SET GLOBAL PAUSE FLAG ──────────────────────────────────
+  // External game RAF loops (tetris.js, reaction.js, etc.) should
+  // guard their loops with: if (window.DZ_PAUSED) return;
+  window.DZ_PAUSED = true;
+
+  // ── 3. PAUSE INTERNAL GAMES (defined in this file) ────────────
+
+  // Air Hockey — dedicated pause flag stops physics + sound
+  if (typeof ahRunning !== 'undefined' && ahRunning) {
+    ahPaused = true;
+    var pauseBtn = document.getElementById('ah-pause-btn');
+    if (pauseBtn) pauseBtn.textContent = '▶';
+  }
+
+  // Tap Battle — stop bot interval + countdown timer
+  if (typeof tapStop === 'function') tapStop();
+
+  // 2048 Duel — stop bot timer
+  if (typeof d2048BotTimer !== 'undefined') {
+    clearInterval(d2048BotTimer); clearTimeout(d2048BotTimer); d2048BotTimer = null;
+  }
+
+  // Hand Cricket — lock numpad so no delayed bot callback fires
+  if (typeof cricNumpadLocked !== 'undefined') cricNumpadLocked = true;
+
+  // Memory Flip — cancel bot move timeout
+  if (typeof mfdState !== 'undefined' && mfdState) {
+    if (mfdState.botTimeout) { clearTimeout(mfdState.botTimeout); mfdState.botTimeout = null; }
+    mfdState.locked = true;
+  }
+
+  // Connect Dots — cancel bot timeout via exposed global (cdd is inside an IIFE closure)
+  if (typeof window.cddDestroyGame === 'function') {
+    window.cddDestroyGame();
+  }
+
+  // Password Breaker — pause countdown timer
+  if (typeof pb !== 'undefined' && pb && pb.timerInterval) {
+    clearInterval(pb.timerInterval); pb.timerInterval = null;
+  }
+
+  // ── 4. CALL KNOWN EXTERNAL STOP FUNCTIONS ─────────────────────
+  // These may or may not be defined depending on which .js loaded.
+  // All calls are guarded so missing functions are silently skipped.
+  var _safeTry = function(fn) { try { if (typeof fn === 'function') fn(); } catch(e) {} };
+  _safeTry(window.ppPause);
+  _safeTry(window.ppStopGame);
+  _safeTry(window.sdStopGame);
+  _safeTry(sdStopGame);
+  _safeTry(window.tetrisStop);
+  _safeTry(window.tetrisDestroy);
+  _safeTry(window.rdStop);
+  _safeTry(window.reactionStop);
+  _safeTry(window.reactionDestroy);
+  _safeTry(window.territoryDestroy);
+  _safeTry(tanksDestroy);
+  _safeTry(scDestroy);
+  _safeTry(window.mineDestroy);
+  _safeTry(window.bombermanDestroy);
+  _safeTry(window.carromStop);
+  _safeTry(window.sudokuStop);
+  _safeTry(window.ludomStop);
+}
+
+function dzStopAllGames() {
+  // Full stop — pause everything then also kill the Air Hockey RAF loop
+  dzPauseAllGames();
+
+  // Air Hockey: stop RAF loop entirely (not just paused flag)
+  if (typeof ahStopLoop === 'function') ahStopLoop();
+  // Reset AH pause flag so next session starts clean
+  if (typeof ahPaused !== 'undefined') ahPaused = false;
+
+  // Cricket: unlock numpad for next fresh session
+  if (typeof cricNumpadLocked !== 'undefined') cricNumpadLocked = false;
+
+  // Memory Flip: mark game over so no callbacks fire
+  if (typeof mfdState !== 'undefined' && mfdState) {
+    mfdState.gameOver = true; mfdState.locked = true;
+  }
+
+  // Password Breaker: mark session over
+  if (typeof pb !== 'undefined' && pb) pb.sessionOver = true;
+}
+
 function dzToggleMenu() {
   _dzMenuOpen ? dzCloseMenu() : dzOpenMenu();
 }
@@ -7742,6 +7859,8 @@ function dzOpenMenu() {
   if (drop) drop.classList.add('open');
   if (drop) drop.setAttribute('aria-hidden', 'false');
   if (bk)   bk.classList.add('active');
+  // FIX: pause every running game so no sound/movement bleeds through
+  dzPauseAllGames();
 }
 
 function dzCloseMenu() {
@@ -7754,6 +7873,13 @@ function dzCloseMenu() {
   if (drop) drop.classList.remove('open');
   if (drop) drop.setAttribute('aria-hidden', 'true');
   if (bk)   bk.classList.remove('active');
+  // Resume audio — but only if we're NOT navigating to hub (dzStopAllGames handles that path)
+  var hub = document.getElementById('screen-hub');
+  var onHub = hub && !hub.classList.contains('hidden');
+  if (!onHub) {
+    window.DZ_PAUSED = false;
+    dzResumeAllAudio();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7785,16 +7911,14 @@ function dzNavShowHome() {
   dzCloseMenu();
   dzClosePanels();
 
-  // ── Stop every game that could be running in the background ──
-  if (typeof window.mineDestroy      === 'function') window.mineDestroy();
-  if (typeof window.tetrisDestroy    === 'function') window.tetrisDestroy();
-  if (typeof window.bombermanDestroy === 'function') window.bombermanDestroy();
-  if (typeof window.reactionDestroy  === 'function') window.reactionDestroy();
-  if (typeof window.territoryDestroy === 'function') window.territoryDestroy();
-  if (typeof tanksDestroy            === 'function') tanksDestroy();
-  if (typeof scDestroy               === 'function') scDestroy();
+  // ── FIX: single call stops every game loop, timer, and sound ──
+  dzStopAllGames();
+
+  // Notify GameLoader that no game is active — but do NOT call closeCurrentGame()
+  // because that calls showHub() again (triggering a second ad interstitial).
+  // We only need to run the active game's destroy() for cleanup.
   if (typeof GameLoader !== 'undefined' && GameLoader.getActiveGameId && GameLoader.getActiveGameId()) {
-    if (typeof GameLoader.closeCurrentGame === 'function') GameLoader.closeCurrentGame();
+    if (typeof GameLoader.destroyActive === 'function') GameLoader.destroyActive();
   }
 
   // ── Force-hide ALL fixed play panels (position:fixed escapes parent hide) ──
@@ -8105,7 +8229,13 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     dzCloseAllLegal();
     dzClosePanels();
-    dzCloseMenu();
+    dzCloseMenu(); // dzCloseMenu already resumes audio if staying in a game
   }
 });
+
+// Expose all helpers globally so inline scripts in index.html can reach them
+window.dzPauseAllGames   = dzPauseAllGames;
+window.dzStopAllGames    = dzStopAllGames;
+window.dzSuspendAllAudio = dzSuspendAllAudio;
+window.dzResumeAllAudio  = dzResumeAllAudio;
 

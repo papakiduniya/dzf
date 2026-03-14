@@ -1,23 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // AIR HOCKEY — Neon Ice Edition  (airhockey.js)
-// ─────────────────────────────────────────────────────────────
-// BUGS FIXED (this revision):
-//   1. showAH() never defined → ReferenceError on "← Menu" click
-//   2. _hitThisFrame reset once before sub-step loop → puck tunnels
-//      through paddle at high speed (must reset per sub-step)
-//   3. dot>=0 early-return → puck glues to stationary paddle (dot=0)
-//   4. stuck-rescue timer check runs AFTER ahEnforceMinSpeed, so
-//      curSpd is always > threshold → timer always resets → rescue
-//      never fires (check must come BEFORE enforceMinSpeed)
-//   5. Bot pvx/pvy not zeroed during goal-freeze → first post-serve
-//      collision uses stale velocity
-//   6. ahPredictPuck only bounces left/right, ignores top/bottom →
-//      bot intercept is wrong for any banked shot
-//   7. No goalpost corner colliders → puck clips through post tips
-//   8. ahResize() only resizes canvas, not puck/paddle geometry →
-//      mid-game resize breaks all physics
-//   9. startAHGame() never calls ahStopLoop() → "Play Again" spawns
-//      a second RAF loop alongside the first
+// Ported from the inline script.js block into a standalone module.
+// Bugs fixed: ahGameOver closing brace, sub-step physics, dt-based
+// everything, pointer velocity, stuck-puck rescue.
 // ═══════════════════════════════════════════════════════════════
 
 // ── Local Audio Engine (fallback when SoundManager is absent) ──
@@ -92,9 +77,9 @@ var ahSnd = {
 
 // ── Bot difficulty configs ─────────────────────────────────────
 var AH_BOT = {
-  easy:   { reaction_time: 380, max_speed: 300,  error_margin: 65,  aggression: 0.25 },
-  medium: { reaction_time: 160, max_speed: 520,  error_margin: 22,  aggression: 0.62 },
-  hard:   { reaction_time: 40,  max_speed: 800,  error_margin: 5,   aggression: 0.92 }
+  easy:   { reaction_time: 420, max_speed: 220,  error_margin: 70,  aggression: 0.25 },
+  medium: { reaction_time: 190, max_speed: 390,  error_margin: 26,  aggression: 0.62 },
+  hard:   { reaction_time: 50,  max_speed: 600,  error_margin: 6,   aggression: 0.92 }
 };
 AH_BOT.extreme = AH_BOT.hard;
 
@@ -111,12 +96,10 @@ var ahLastTime = 0;
 
 var ahPuck = { x:0, y:0, vx:0, vy:0, r:0, vServe:null };
 var ahPaddles = [
-  { x:0, y:0, r:0, pvx:0, pvy:0, _hitThisFrame:false, key:{up:false,dn:false,lt:false,rt:false} },
-  { x:0, y:0, r:0, pvx:0, pvy:0, _hitThisFrame:false, key:{up:false,dn:false,lt:false,rt:false} }
+  { x:0, y:0, r:0, pvx:0, pvy:0, key:{up:false,dn:false,lt:false,rt:false} },
+  { x:0, y:0, r:0, pvx:0, pvy:0, key:{up:false,dn:false,lt:false,rt:false} }
 ];
 
-var ahAccumulator = 0;   // fixed-timestep accumulator (ms)
-var AH_FIXED_DT   = 1000 / 60;  // 16.667 ms — one physics tick
 var ahBotTimer    = 0;
 var ahBotTarget   = { x:0, y:0 };
 var ahGoalFreezeMs = 0;
@@ -126,8 +109,6 @@ var ahParticles   = [];
 var ahSpeedLines  = [];
 var ahRings       = [];
 var ahStuckTimer  = 0;
-var ahCornerTimer = 0;       // FIX: corner-escape timer
-var ahPuckTargetSpeed = 0;   // FIX: constant speed target
 var ahP1Score = 0, ahP2Score = 0;
 var ahMatchCount  = 0;
 
@@ -138,37 +119,45 @@ function ahStopLoop() {
   window.removeEventListener('resize', ahResize);
 }
 
-// FIX 8: ahResize now rescales all in-game geometry when canvas dimensions change.
-// Previously it only resized the canvas element — mid-game resize left puck/paddle
-// at stale pixel positions and with radii from the old canvas size.
 function ahResize() {
   var field = document.getElementById('ah-canvas-field');
   if (!field || !ahCanvas) return;
   var fw = field.clientWidth  || 360;
   var fh = field.clientHeight || Math.round(fw * 1.55);
-  var oldW = ahW || 0, oldH = ahH || 0;
-  ahW = Math.min(fw, 420);
-  ahH = Math.max(Math.round(ahW * 1.5), Math.min(fh, 660));
+  var newW = Math.min(fw, 420);
+  var newH = Math.max(Math.round(newW * 1.5), Math.min(fh, 660));
+  // BUG 4 FIX: if the game is already running, rescale all positions
+  // proportionally so puck and paddles don't fly off-screen on resize.
+  if (ahRunning && ahW && ahH && (newW !== ahW || newH !== ahH)) {
+    var sx = newW / ahW, sy = newH / ahH;
+    ahPuck.x *= sx; ahPuck.y *= sy;
+    ahPuck.r  = newW * 0.055;
+    for (var i=0;i<2;i++) {
+      ahPaddles[i].x *= sx; ahPaddles[i].y *= sy;
+      ahPaddles[i].r  = newW * 0.09;
+    }
+    ahBotTarget.x *= sx; ahBotTarget.y *= sy;
+    // ROOT-CAUSE FIX (slow puck): ahPuckSpeed was never updated on resize so
+    // ahLockPuckSpeed() kept renormalising to the stale initialWidth*0.72.
+    // On mobile (keyboard open/close, orientation change) this made the puck
+    // visually faster or slower after every resize event.
+    ahPuckSpeed = newW * 0.72;
+    // Also rescale the pending serve velocity so after freeze the puck
+    // launches at the new correct speed, not the old one.
+    if (ahPuck.vServe) {
+      var sm = Math.sqrt(ahPuck.vServe.vx*ahPuck.vServe.vx + ahPuck.vServe.vy*ahPuck.vServe.vy);
+      if (sm > 0.01) {
+        ahPuck.vServe.vx = ahPuck.vServe.vx / sm * ahPuckSpeed;
+        ahPuck.vServe.vy = ahPuck.vServe.vy / sm * ahPuckSpeed;
+      }
+    }
+    // Re-lock live puck velocity to the new speed immediately.
+    ahLockPuckSpeed();
+  }
+  ahW = newW;
+  ahH = newH;
   ahCanvas.width  = ahW;
   ahCanvas.height = ahH;
-  if (oldW > 0 && (oldW !== ahW || oldH !== ahH)) {
-    var sx = ahW / oldW, sy = ahH / oldH;
-    ahPuck.r        = ahW * 0.055;
-    ahPaddles[0].r  = ahW * 0.09;
-    ahPaddles[1].r  = ahW * 0.09;
-    ahPuck.x       *= sx;  ahPuck.y       *= sy;
-    ahPaddles[0].x *= sx;  ahPaddles[0].y *= sy;
-    ahPaddles[1].x *= sx;  ahPaddles[1].y *= sy;
-    ahBotTarget.x  *= sx;  ahBotTarget.y  *= sy;
-    // Scale velocity and target speed so puck pace matches new canvas size.
-    ahPuck.vx *= sx; ahPuck.vy *= sy;
-    if (ahPuckTargetSpeed > 0) {
-      ahPuckTargetSpeed = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
-      if (ahPuckTargetSpeed < 0.01) ahPuckTargetSpeed = ahW * 1.6;
-    }
-    ahClampPaddle(ahPaddles[0], 0);
-    ahClampPaddle(ahPaddles[1], 1);
-  }
 }
 
 function ahGoalWidth() { return ahW * 0.42; }
@@ -181,6 +170,8 @@ function ahClampPaddle(p, idx) {
 }
 
 // ── Init ───────────────────────────────────────────────────────
+var ahPuckSpeed = 0; // constant speed — set in ahInit, scales with canvas width
+
 function ahInit() {
   ahCanvas = document.getElementById('ah-canvas');
   ahCtx    = ahCanvas.getContext('2d');
@@ -189,8 +180,11 @@ function ahInit() {
   ahPuck.r       = ahW * 0.055;
   ahPaddles[0].r = ahW * 0.09;
   ahPaddles[1].r = ahW * 0.09;
+  // Constant puck speed — roughly 0.72× canvas width per second.
+  // Adjust this value to tune game feel (higher = faster puck).
+  ahPuckSpeed = ahW * 0.72;
   ahTrail=[]; ahParticles=[]; ahSpeedLines=[]; ahRings=[];
-  ahBotTimer=0; ahStuckTimer=0; ahCornerTimer=0; ahAccumulator=0; ahPuckTargetSpeed=0; ahGoalFreezeMs=0; ahBotPhase='defend';
+  ahBotTimer=0; ahStuckTimer=0; ahGoalFreezeMs=0;
   ahBotTarget.x = ahW / 2;
   ahBotTarget.y = ahH * 0.2;
   ahResetPositions(0);
@@ -205,96 +199,62 @@ function ahResetPositions(serveWho) {
   ahServeWho = serveWho;
   ahGoalFreezeMs = 1300;
   ahTrail=[]; ahSpeedLines=[];
-  // Fixed speed every serve — only direction angle is randomised.
-  var SERVE_SPEED = ahW * 1.6;
-  ahPuckTargetSpeed = SERVE_SPEED;
   var dir = (serveWho === 0) ? -1 : 1;
-  // Angle: mostly vertical (±20° spread) so the serve is clearly aimed at opponent.
-  var spread = (Math.random() - 0.5) * 0.7;          // ±~20°
-  var baseAng = dir < 0 ? -Math.PI/2 : Math.PI/2;    // straight up or down
-  var ang = baseAng + spread;
-  ahPuck.vServe = { vx: Math.cos(ang)*SERVE_SPEED, vy: Math.sin(ang)*SERVE_SPEED };
+  // Serve at constant speed with a small random horizontal component.
+  var angle = (Math.random() - 0.5) * (Math.PI / 5); // ±18° spread
+  ahPuck.vServe = {
+    vx: Math.sin(angle) * ahPuckSpeed,
+    vy: dir * Math.cos(angle) * ahPuckSpeed
+  };
 }
 
 // ── Bot AI ─────────────────────────────────────────────────────
-var ahBotPhase = 'defend';
-
-// FIX 6: ahPredictPuck now correctly bounces off top/bottom walls in addition
-// to left/right. Previously the bot's intercept calculation flew the puck
-// into empty space past the top/bottom walls, giving totally wrong positions.
 function ahPredictPuck(numSteps, dt_sub) {
   var x=ahPuck.x, y=ahPuck.y, vx=ahPuck.vx, vy=ahPuck.vy;
   var r=ahPuck.r, sec=dt_sub/1000;
-  var gw=ahGoalWidth()/2, cx=ahW/2;
   for (var s=0; s<numSteps; s++) {
     x+=vx*sec; y+=vy*sec;
     if (x-r<0)   { x=r;     vx= Math.abs(vx); }
     if (x+r>ahW) { x=ahW-r; vx=-Math.abs(vx); }
-    // Bounce off top/bottom walls (respecting goal openings, same as physics)
-    if (y-r<0   && !(x>cx-gw && x<cx+gw)) { y=r;     vy= Math.abs(vy); }
-    if (y+r>ahH && !(x>cx-gw && x<cx+gw)) { y=ahH-r; vy=-Math.abs(vy); }
-    if (vy>0 && y>ahH*0.65) break; // puck clearly in player half, stop early
+    // BUG 1 FIX: simulate top wall bounce so bot correctly predicts
+    // puck trajectory when it approaches the bot's own goal line.
+    if (y-r<0)   { y=r;     vy= Math.abs(vy); }
+    // BUG 1 FIX: also simulate bottom wall bounce for completeness
+    if (y+r>ahH) { y=ahH-r; vy=-Math.abs(vy); }
+    // Stop early only once puck has reversed and is heading away from bot
+    if (vy>0 && y>ahH*0.5) break;
   }
   return { x:x, y:y };
 }
 
 function ahUpdateBot(dt) {
-  if (ahMode!=='pvb') return;
+  // BUG FIX: do not recalculate bot target while the puck is frozen at
+  // centre-field during a goal freeze — the bot was always aiming at (W/2,H/2).
+  if (ahMode!=='pvb' || ahGoalFreezeMs > 0) return;
   var cfg=AH_BOT[ahDiff]||AH_BOT.easy;
   ahBotTimer+=dt;
   if (ahBotTimer<cfg.reaction_time) return;
   ahBotTimer=0;
-
   var b=ahPaddles[1], pk=ahPuck;
   var err=(Math.random()-0.5)*cfg.error_margin*2;
-  var puckInBotHalf = pk.y < ahH*0.5;
-  var puckComingUp   = pk.vy < 0; // negative y = moving toward bot (top)
-
-  // FIX: Keep bot targets well clear of walls so it never drives the puck
-  // into a corner.  xMin/xMax keep the bot off the side walls; yMin/yMax
-  // keep it in its own half with a safe margin from the top wall.
-  var wm = b.r + 8;                 // horizontal wall margin
-  var xMin = wm, xMax = ahW - wm;
-  var yMin = b.r + 6, yMax = ahH * 0.5 - b.r - 6;
-
-  if (puckInBotHalf) {
-    // Bot wants to get ABOVE (lower y) the puck then drive it downward.
-    var aimX = ahW/2 + err * (1 - cfg.aggression*0.6);
-    var swingOffset = (b.r + pk.r) * 1.8;
-
-    // Only enter attack if there's room to position above the puck without
-    // being squeezed against the top wall — that's exactly what caused the
-    // corner-trapping loop.
-    var minYForAttack = yMin + swingOffset + b.r;
-    if (pk.y > minYForAttack) {
-      var dx_lean = (pk.x - aimX) * 0.3;
-      var tx = pk.x - dx_lean + err*0.15;
-      var ty = pk.y - swingOffset;
-      ahBotTarget.x = Math.max(xMin, Math.min(xMax, tx));
-      ahBotTarget.y = Math.max(yMin, Math.min(yMax, ty));
-      var windupDx = b.x - ahBotTarget.x, windupDy = b.y - ahBotTarget.y;
-      var alignedForStrike = (windupDx*windupDx + windupDy*windupDy) < (b.r*2.5)*(b.r*2.5);
-      if (alignedForStrike || cfg.aggression > 0.85) {
-        var strikeY = pk.y + (b.r + pk.r) * (1.6 + cfg.aggression * 0.8);
-        ahBotTarget.x = Math.max(xMin, Math.min(xMax, aimX));
-        ahBotTarget.y = Math.min(yMax, strikeY);
-      }
-    } else {
-      // Puck is too close to the top wall — retreat to centre rather than
-      // chasing the puck into the corner.  The puck will bounce back shortly.
-      ahBotTarget.x = Math.max(xMin, Math.min(xMax, ahW/2 + err*0.2));
-      ahBotTarget.y = Math.max(yMin, Math.min(yMax, ahH * 0.22));
-    }
-  } else if (puckComingUp) {
-    var lookSteps = Math.max(8, Math.round(20*cfg.aggression));
-    var pred = ahPredictPuck(lookSteps, 14);
-    ahBotTarget.x = Math.max(xMin, Math.min(xMax, pred.x + err));
-    ahBotTarget.y = Math.max(yMin, Math.min(yMax, pred.y + err*0.2));
+  // BUG 2 FIX: was named "puckInBotHalf" but bot is at the TOP of the field.
+  // pk.y < ahH*0.5 correctly checks if puck is in the TOP half = bot's zone.
+  var puckInBotZone=pk.y<ahH*0.5, puckApproaching=pk.vy<0;
+  if (puckApproaching||puckInBotZone) {
+    var lookSteps=Math.max(8,Math.round(18*cfg.aggression));
+    var pred=ahPredictPuck(lookSteps,14);
+    var tx,ty;
+    if (cfg.aggression>0.7) {
+      var lb=(pred.x<ahW*0.5)?ahW*0.25:ahW*0.75;
+      tx=pred.x*0.55+lb*0.45+err*0.3; ty=pred.y-b.r*0.5+err*0.2;
+    } else { tx=pred.x+err; ty=pred.y+err*0.25; }
+    ahBotTarget.x=Math.max(b.r,Math.min(ahW-b.r,tx));
+    ahBotTarget.y=Math.max(b.r,Math.min(ahH*0.5-b.r,ty));
   } else {
-    var defX = pk.x*0.45 + ahW/2*0.55 + err*0.15;
-    var defY = cfg.aggression>0.7 ? ahH*0.13 : cfg.aggression>0.4 ? ahH*0.11 : ahH*0.09;
-    ahBotTarget.x = Math.max(xMin, Math.min(xMax, defX));
-    ahBotTarget.y = Math.max(yMin, Math.min(yMax, defY));
+    var defX=ahW/2+err*0.25;
+    var defY=cfg.aggression>0.7?ahH*0.23:cfg.aggression>0.4?ahH*0.19:ahH*0.13+err*0.1;
+    ahBotTarget.x=Math.max(b.r,Math.min(ahW-b.r,defX));
+    ahBotTarget.y=Math.max(b.r,Math.min(ahH*0.5-b.r,defY));
   }
 }
 
@@ -303,7 +263,7 @@ function ahMoveBot(dt) {
   var cfg=AH_BOT[ahDiff]||AH_BOT.easy, b=ahPaddles[1];
   var dx=ahBotTarget.x-b.x, dy=ahBotTarget.y-b.y;
   var dist=Math.sqrt(dx*dx+dy*dy);
-  if (dist<0.5) { b.pvx=0; b.pvy=0; return; }
+  if (dist<0.5 || dt<=0) { b.pvx=0; b.pvy=0; return; }
   var step=Math.min(cfg.max_speed*(dt/1000), dist);
   b.pvx=(dx/dist)*step/(dt/1000);
   b.pvy=(dy/dist)*step/(dt/1000);
@@ -314,47 +274,35 @@ function ahMoveBot(dt) {
 // ── Physics ─────────────────────────────────────────────────────
 function ahCircleCollide(a,b) {
   var dx=b.x-a.x, dy=b.y-a.y;
-  return dx*dx+dy*dy<(a.r+b.r)*(a.r+b.r);
+  // BUG 5 FIX: use <= so touching circles (distance == sum of radii) are
+  // also detected; strict < created a pixel-gap where fast-moving pucks
+  // could pass through the paddle without triggering collision.
+  return dx*dx+dy*dy<=(a.r+b.r)*(a.r+b.r);
 }
 
 function ahResolvePaddlePuck(paddle,puck) {
   var dx=puck.x-paddle.x, dy=puck.y-paddle.y;
   var d=Math.sqrt(dx*dx+dy*dy);
-  if (d===0) { d=0.01; dx=1; dy=0; }
+  // BUG FIX: if centres overlap exactly, push puck straight upward (away
+  // from whichever paddle half the puck occupies) rather than arbitrarily
+  // rightward — the old (dx=1,dy=0) fallback could drive the puck into a
+  // side wall instead of out in front of the paddle.
+  if (d===0) { d=0.01; dx=0; dy=(puck.y<=ahH/2?-1:1); }
   var nx=dx/d, ny=dy/d;
-
-  // Push puck out of paddle to prevent embedding
   var overlap=(paddle.r+puck.r+2)-d;
   if (overlap>0) { puck.x+=nx*overlap; puck.y+=ny*overlap; }
-
   var relVx=puck.vx-paddle.pvx, relVy=puck.vy-paddle.pvy;
   var dot=relVx*nx+relVy*ny;
-  if (dot > 0) return; // already separating
-
-  // Reflect puck velocity off the collision normal (pure elastic, no spin/boost
-  // so the direction changes but magnitude is untouched before we normalize).
-  puck.vx -= 2*dot*nx;
-  puck.vy -= 2*dot*ny;
-
-  // If paddle is moving, add a nudge in its direction so hits feel responsive,
-  // but immediately re-normalize so speed is unaffected.
-  var paddleSpd=Math.sqrt(paddle.pvx*paddle.pvx+paddle.pvy*paddle.pvy);
-  if (paddleSpd > 10) {
-    var nudge = 0.18;
-    puck.vx += paddle.pvx * nudge;
-    puck.vy += paddle.pvy * nudge;
-  }
-
-  // Hard-lock to constant speed — direction only ever changes on a hit
-  var spd=Math.sqrt(puck.vx*puck.vx+puck.vy*puck.vy)||1;
-  puck.vx = puck.vx / spd * ahPuckTargetSpeed;
-  puck.vy = puck.vy / spd * ahPuckTargetSpeed;
-
-  // Guarantee puck is moving away from paddle after collision
-  var sepVel = puck.vx*nx + puck.vy*ny;
-  if (sepVel < 0) { puck.vx -= 2*sepVel*nx; puck.vy -= 2*sepVel*ny;
-    var s2=Math.sqrt(puck.vx*puck.vx+puck.vy*puck.vy)||1;
-    puck.vx=puck.vx/s2*ahPuckTargetSpeed; puck.vy=puck.vy/s2*ahPuckTargetSpeed; }
+  if (dot>=0) return;
+  var restitution=0.88;
+  var tx=-ny, ty=nx;
+  var tangDot=relVx*tx+relVy*ty;
+  var spinFactor=(dx/(paddle.r+puck.r))*0.16;
+  puck.vx=(puck.vx-(1+restitution)*dot*nx)+paddle.pvx*0.65+tangDot*tx*spinFactor;
+  puck.vy=(puck.vy-(1+restitution)*dot*ny)+paddle.pvy*0.65+tangDot*ty*spinFactor;
+  // Constant speed: ignore any speed added/removed by paddle — renormalize.
+  ahLockPuckSpeed();
+  var spd=ahPuckSpeed;
   ahSpawnImpact(puck.x,puck.y);
   ahRings.push({x:puck.x,y:puck.y,r:paddle.r,life:1});
   ahSnd.paddleHit(spd/60);
@@ -376,92 +324,53 @@ function ahSpawnWallSparks(x,y) {
   }
 }
 
-// Safety: if puck somehow becomes stationary (should never happen), kick it.
-// Constant speed is maintained per sub-step inside ahPhysicsStep and on every
-// paddle hit in ahResolvePaddlePuck — this function is the final safety net only.
-function ahEnforceMinSpeed() {
-  var target = ahPuckTargetSpeed > 0 ? ahPuckTargetSpeed : ahW * 0.75;
-  var spd2 = ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy;
-  if (spd2 < 1) {
-    var ang = Math.atan2(ahH/2 - ahPuck.y, ahW/2 - ahPuck.x) + (Math.random()-0.5)*1.2;
-    ahPuck.vx = Math.cos(ang) * target;
-    ahPuck.vy = Math.sin(ang) * target;
+// ── Renormalize puck to constant speed — call after any direction change ──
+function ahLockPuckSpeed() {
+  var mag = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
+  if (mag > 0.01) {
+    ahPuck.vx = ahPuck.vx / mag * ahPuckSpeed;
+    ahPuck.vy = ahPuck.vy / mag * ahPuckSpeed;
+  } else if (ahGoalFreezeMs <= 0 && !ahPuck.vServe) {
+    // BUG FIX: puck velocity cancelled to near-zero during play (e.g. a
+    // perfectly head-on double-paddle hit). Rather than waiting up to 3 s
+    // for the stuck-rescue, immediately launch it in a safe direction.
+    var rescueAngle = (Math.random() - 0.5) * (Math.PI / 4);
+    var rescueDir   = ahPuck.y < ahH / 2 ? 1 : -1; // aim away from nearest wall
+    ahPuck.vx = Math.sin(rescueAngle) * ahPuckSpeed;
+    ahPuck.vy = rescueDir * Math.cos(rescueAngle) * ahPuckSpeed;
   }
 }
 
-function ahPhysicsStep(dt_sub, wallFlags) {
+function ahPhysicsStep(dt_sub,wallFlags) {
   var sec=dt_sub/1000, r=ahPuck.r, gw=ahGoalWidth()/2, cx=ahW/2;
+
+  // ── Constant speed: NO friction, NO deceleration ──────────────
+  // Lock to ahPuckSpeed every step so nothing can slow the puck.
+  ahLockPuckSpeed();
 
   ahPuck.x+=ahPuck.vx*sec; ahPuck.y+=ahPuck.vy*sec;
 
-  // Side walls
+  // Wall bounces — flip direction, then re-lock speed (no 0.95 damping).
   if (ahPuck.x-r<0) {
-    ahPuck.x=r; ahPuck.vx=Math.abs(ahPuck.vx);
+    ahPuck.x=r; ahPuck.vx=Math.abs(ahPuck.vx); ahLockPuckSpeed();
     if (!wallFlags.left) { wallFlags.left=true; ahSpawnWallSparks(r,ahPuck.y); ahSnd.wallBounce(); }
   }
   if (ahPuck.x+r>ahW) {
-    ahPuck.x=ahW-r; ahPuck.vx=-Math.abs(ahPuck.vx);
+    ahPuck.x=ahW-r; ahPuck.vx=-Math.abs(ahPuck.vx); ahLockPuckSpeed();
     if (!wallFlags.right) { wallFlags.right=true; ahSpawnWallSparks(ahW-r,ahPuck.y); ahSnd.wallBounce(); }
   }
-  // Top/bottom walls (exclude goal mouth)
   if (ahPuck.y-r<0 && !(ahPuck.x>cx-gw&&ahPuck.x<cx+gw)) {
-    ahPuck.y=r; ahPuck.vy=Math.abs(ahPuck.vy);
+    ahPuck.y=r; ahPuck.vy=Math.abs(ahPuck.vy); ahLockPuckSpeed();
     if (!wallFlags.top) { wallFlags.top=true; ahSpawnWallSparks(ahPuck.x,r); ahSnd.wallBounce(); }
   }
   if (ahPuck.y+r>ahH && !(ahPuck.x>cx-gw&&ahPuck.x<cx+gw)) {
-    ahPuck.y=ahH-r; ahPuck.vy=-Math.abs(ahPuck.vy);
+    ahPuck.y=ahH-r; ahPuck.vy=-Math.abs(ahPuck.vy); ahLockPuckSpeed();
     if (!wallFlags.bot) { wallFlags.bot=true; ahSpawnWallSparks(ahPuck.x,ahH-r); ahSnd.wallBounce(); }
   }
-
-  // FIX 7: Goalpost corner colliders. The tips of the four goal posts sit at
-  // (cx±gw, 0) and (cx±gw, H). Without explicit collision geometry a fast puck
-  // can cross the wall/goal boundary and clip straight past the post. Each post
-  // is modelled as a small circle so the puck reflects correctly off the corner.
-  var postR = r * 0.6;
-  var posts = [{x:cx-gw,y:0},{x:cx+gw,y:0},{x:cx-gw,y:ahH},{x:cx+gw,y:ahH}];
-  for (var ip=0; ip<4; ip++) {
-    var pt = posts[ip];
-    var pdx = ahPuck.x - pt.x, pdy = ahPuck.y - pt.y;
-    var pd2 = pdx*pdx + pdy*pdy, minD = r + postR;
-    if (pd2 < minD*minD && pd2 > 0.0001) {
-      var pd = Math.sqrt(pd2), pnx = pdx/pd, pny = pdy/pd;
-      // Push puck out
-      ahPuck.x = pt.x + pnx*(minD+1);
-      ahPuck.y = pt.y + pny*(minD+1);
-      // Elastic reflect off post normal
-      var dv = ahPuck.vx*pnx + ahPuck.vy*pny;
-      if (dv < 0) { ahPuck.vx -= 2*dv*pnx; ahPuck.vy -= 2*dv*pny; }
-      if (!wallFlags.post) { wallFlags.post=true; ahSpawnWallSparks(ahPuck.x,ahPuck.y); ahSnd.wallBounce(); }
-    }
-  }
-
-  // Paddle collisions
-  // FIX 2: _hitThisFrame must be reset inside the sub-step loop (done in ahLoop),
-  // not once before the whole loop. With the old approach, sub-step 2+ found the
-  // flag already true and only did a position nudge — no velocity correction —
-  // so a fast puck would tunnel straight through the paddle.
   for (var pi=0;pi<2;pi++) {
-    if (ahCircleCollide(ahPaddles[pi],ahPuck)) {
-      if (!ahPaddles[pi]._hitThisFrame) {
-        ahResolvePaddlePuck(ahPaddles[pi],ahPuck);
-        ahPaddles[pi]._hitThisFrame=true;
-      } else {
-        var _dx=ahPuck.x-ahPaddles[pi].x, _dy=ahPuck.y-ahPaddles[pi].y;
-        var _d=Math.sqrt(_dx*_dx+_dy*_dy)||0.01;
-        var _ov=(ahPaddles[pi].r+ahPuck.r+2)-_d;
-        if (_ov>0) { ahPuck.x+=(_dx/_d)*_ov; ahPuck.y+=(_dy/_d)*_ov; }
-      }
-    }
+    if (ahCircleCollide(ahPaddles[pi],ahPuck)) ahResolvePaddlePuck(ahPaddles[pi],ahPuck);
   }
-
-  // Constant speed — re-normalise after every sub-step
-  if (ahPuckTargetSpeed > 0) {
-    var _spd = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy) || 1;
-    ahPuck.vx = ahPuck.vx / _spd * ahPuckTargetSpeed;
-    ahPuck.vy = ahPuck.vy / _spd * ahPuckTargetSpeed;
-  }
-
-  // Goal detection
+  // Goal: puck fully past end line inside goal zone
   if (ahPuck.y-r<0 && ahPuck.x>cx-gw && ahPuck.x<cx+gw) {
     ahP1Score++; ahSnd.goal(true); ahUpdateScoreUI(); ahShowGoalFlash(0);
     if (ahP1Score>=ahWinScore) { ahGameOver(0); return true; }
@@ -498,13 +407,10 @@ function ahUpdatePips(id,score,total,color) {
 
 function ahShowGoalFlash(who) {
   var el=document.getElementById('ah-goal-flash'); if (!el) return;
-  clearTimeout(el._t);
-  el.style.display='none';
-  el.className='ah-goal-flash';
-  void el.offsetWidth;
   el.className='ah-goal-flash ah-goal-flash--'+(who===0?'p1':'p2');
   el.textContent='⚡ GOAL!';
   el.style.display='flex';
+  clearTimeout(el._t);
   el._t=setTimeout(function(){el.style.display='none';},1100);
 }
 
@@ -513,7 +419,9 @@ function ahGameOver(winner) {
   ahMatchCount++;
   var label=winner===0?'PLAYER 1':(ahMode==='pvb'?'BOT':'PLAYER 2');
   var color=winner===0?'#00e5ff':(ahMode==='pvb'?'#ff4081':'#ff9100');
-  if (winner===0) ahSnd.win(); else if (ahMode==='pvp') ahSnd.win(); else ahSnd.lose();
+  if (winner===0) ahSnd.win(); else ahSnd.lose();
+  // BUG 3 FIX: added null guard — if the overlay element is absent the
+  // original code would throw a TypeError and freeze the UI silently.
   var el=document.getElementById('ah-overlay-msg');
   if (!el) return;
   el.style.display='flex'; el.className='ah-overlay-msg';
@@ -539,140 +447,96 @@ function ahLoop(ts) {
   ahLastTime=ts;
   if (ahPaused) { ahDraw(); ahRAF=requestAnimationFrame(ahLoop); return; }
 
+  ahUpdateBot(dt);
+
   if (ahGoalFreezeMs>0) {
     ahGoalFreezeMs-=dt;
+    // BUG FIX: clamp BOTH paddles every freeze frame; previously the bot
+    // paddle was skipped in PvB mode, so a mid-freeze canvas resize could
+    // leave it outside its half of the table.
     ahClampPaddle(ahPaddles[0],0);
     ahClampPaddle(ahPaddles[1],1);
-    // FIX 5: zero bot pvx/pvy during the freeze so stale pre-goal velocity
-    // doesn't corrupt the first paddle collision after the serve launches.
-    ahPaddles[1].pvx=0; ahPaddles[1].pvy=0;
     if (ahGoalFreezeMs<=0) {
       ahGoalFreezeMs=0;
       if (ahPuck.vServe) {
         ahPuck.vx=ahPuck.vServe.vx; ahPuck.vy=ahPuck.vServe.vy;
-        // Re-sync target speed (already set in ahResetPositions; this is a safety guard).
-        ahPuckTargetSpeed = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
-        ahPuck.vServe=null;
-        ahAccumulator=0;  // start fresh — no accumulated debt from freeze period
-        ahLoop._lastPx=ahPuck.x; ahLoop._lastPy=ahPuck.y; ahStuckTimer=0;
-        ahSnd.puckStart();
+        ahPuck.vServe=null; ahSnd.puckStart();
       }
     }
     ahDraw(); ahRAF=requestAnimationFrame(ahLoop); return;
   }
 
-  // ── Fixed-timestep accumulator ─────────────────────────────
-  // Accumulate real elapsed time, then drain it in fixed 16.667 ms ticks.
-  // This decouples physics from the display frame-rate so the puck always
-  // travels exactly (ahPuckTargetSpeed * AH_FIXED_DT/1000) px per tick —
-  // constant perceived speed regardless of monitor Hz or frame drops.
-  ahAccumulator += dt;
-  // Safety cap: if we've fallen more than 5 ticks behind (e.g. tab was hidden
-  // beyond the dt=50 guard), discard the surplus so we don't spiral.
-  if (ahAccumulator > AH_FIXED_DT * 5) ahAccumulator = AH_FIXED_DT * 5;
+  ahMoveBot(dt);
 
-  var goalScored = false;
-  while (ahAccumulator >= AH_FIXED_DT && !goalScored) {
-    var tickDt = AH_FIXED_DT;          // always the same — the whole point
+  // Keyboard P1
+  var kSpd=ahW*1.35*(dt/1000), p0=ahPaddles[0];
+  if (p0.key.up) { p0.pvy=-kSpd/(dt/1000); p0.y-=kSpd; }
+  else if (p0.key.dn) { p0.pvy=kSpd/(dt/1000); p0.y+=kSpd; } else p0.pvy=0;
+  if (p0.key.lt) { p0.pvx=-kSpd/(dt/1000); p0.x-=kSpd; }
+  else if (p0.key.rt) { p0.pvx=kSpd/(dt/1000); p0.x+=kSpd; } else p0.pvx=0;
+  ahClampPaddle(p0,0);
 
-    ahUpdateBot(tickDt);
-    ahMoveBot(tickDt);
-
-    // Keyboard P1
-    var kSpd=ahW*1.35*(tickDt/1000), p0=ahPaddles[0];
-    if (p0.key.up) { p0.pvy=-kSpd/(tickDt/1000); p0.y-=kSpd; }
-    else if (p0.key.dn) { p0.pvy=kSpd/(tickDt/1000); p0.y+=kSpd; } else p0.pvy=0;
-    if (p0.key.lt) { p0.pvx=-kSpd/(tickDt/1000); p0.x-=kSpd; }
-    else if (p0.key.rt) { p0.pvx=kSpd/(tickDt/1000); p0.x+=kSpd; } else p0.pvx=0;
-    ahClampPaddle(p0,0);
-
-    // Keyboard P2 (PvP)
-    if (ahMode==='pvp') {
-      var p1=ahPaddles[1];
-      if (p1.key.up) { p1.pvy=-kSpd/(tickDt/1000); p1.y-=kSpd; }
-      else if (p1.key.dn) { p1.pvy=kSpd/(tickDt/1000); p1.y+=kSpd; } else p1.pvy=0;
-      if (p1.key.lt) { p1.pvx=-kSpd/(tickDt/1000); p1.x-=kSpd; }
-      else if (p1.key.rt) { p1.pvx=kSpd/(tickDt/1000); p1.x+=kSpd; } else p1.pvx=0;
-      ahClampPaddle(p1,1);
-    }
-
-    // Sub-step physics (collision precision within each fixed tick)
-    var puckSpd=Math.sqrt(ahPuck.vx*ahPuck.vx+ahPuck.vy*ahPuck.vy);
-    var subSteps=Math.max(1,Math.min(10,Math.ceil(puckSpd*(tickDt/1000)/(ahPuck.r*0.4))));
-    var dt_sub=tickDt/subSteps;
-    var wallFlags={left:false,right:false,top:false,bot:false,post:false};
-    for (var s=0;s<subSteps&&!goalScored;s++) {
-      ahPaddles[0]._hitThisFrame=false;
-      ahPaddles[1]._hitThisFrame=false;
-      goalScored=ahPhysicsStep(dt_sub,wallFlags);
-    }
-
-    // Stuck-rescue (position-drift check, runs once per tick)
-    if (!ahLoop._lastPx) { ahLoop._lastPx=ahPuck.x; ahLoop._lastPy=ahPuck.y; }
-    var _pdx=ahPuck.x-ahLoop._lastPx, _pdy=ahPuck.y-ahLoop._lastPy;
-    var _moved=Math.sqrt(_pdx*_pdx+_pdy*_pdy);
-    ahLoop._lastPx=ahPuck.x; ahLoop._lastPy=ahPuck.y;
-    if (_moved > ahPuck.r*0.3) { ahStuckTimer=0; }
-    ahStuckTimer += tickDt;
-    if (ahStuckTimer>2000) {
-      ahStuckTimer=0;
-      var _kickAng=Math.atan2(ahH/2-ahPuck.y, ahW/2-ahPuck.x)+(Math.random()-0.5)*1.0;
-      ahPuck.vx=Math.cos(_kickAng)*ahPuckTargetSpeed;
-      ahPuck.vy=Math.sin(_kickAng)*ahPuckTargetSpeed;
-      ahSnd.puckStart();
-    }
-
-    // Corner-escape
-    var gw2 = ahGoalWidth()/2, cx2 = ahW/2;
-    var nearSideWall = ahPuck.x < ahPuck.r*5 || ahPuck.x > ahW - ahPuck.r*5;
-    var nearEndWall  = (ahPuck.y < ahPuck.r*5 && !(ahPuck.x>cx2-gw2 && ahPuck.x<cx2+gw2)) ||
-                       (ahPuck.y > ahH - ahPuck.r*5 && !(ahPuck.x>cx2-gw2 && ahPuck.x<cx2+gw2));
-    if (nearSideWall && nearEndWall) {
-      ahCornerTimer += tickDt;
-      if (ahCornerTimer > 700) {
-        ahCornerTimer = 0;
-        var kickAng = Math.atan2(ahH/2 - ahPuck.y, ahW/2 - ahPuck.x) + (Math.random()-0.5)*0.6;
-        ahPuck.vx = Math.cos(kickAng) * (ahPuckTargetSpeed || ahW*0.85);
-        ahPuck.vy = Math.sin(kickAng) * (ahPuckTargetSpeed || ahW*0.85);
-      }
-    } else {
-      ahCornerTimer = 0;
-    }
-
-    // Safety: kick puck if stationary
-    ahEnforceMinSpeed();
-
-    // HARD LOCK — puck exits every tick at exactly ahPuckTargetSpeed
-    if (ahPuckTargetSpeed > 0) {
-      var _fs = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy) || 1;
-      ahPuck.vx = ahPuck.vx / _fs * ahPuckTargetSpeed;
-      ahPuck.vy = ahPuck.vy / _fs * ahPuckTargetSpeed;
-    }
-
-    ahAccumulator -= AH_FIXED_DT;
+  // Keyboard P2 (PvP)
+  if (ahMode==='pvp') {
+    var p1=ahPaddles[1];
+    if (p1.key.up) { p1.pvy=-kSpd/(dt/1000); p1.y-=kSpd; }
+    else if (p1.key.dn) { p1.pvy=kSpd/(dt/1000); p1.y+=kSpd; } else p1.pvy=0;
+    if (p1.key.lt) { p1.pvx=-kSpd/(dt/1000); p1.x-=kSpd; }
+    else if (p1.key.rt) { p1.pvx=kSpd/(dt/1000); p1.x+=kSpd; } else p1.pvx=0;
+    ahClampPaddle(p1,1);
   }
 
+  // Sub-step physics — snapshot speed BEFORE stepping (used for subStep count).
+  var puckSpdPre=Math.sqrt(ahPuck.vx*ahPuck.vx+ahPuck.vy*ahPuck.vy);
+  var subSteps=Math.max(1,Math.min(6,Math.ceil(puckSpdPre*(dt/1000)/(ahPuck.r*0.75))));
+  var dt_sub=dt/subSteps;
+  var wallFlags={left:false,right:false,top:false,bot:false};
+  var goalScored=false;
+  for (var s=0;s<subSteps&&!goalScored;s++) goalScored=ahPhysicsStep(dt_sub,wallFlags);
   if (goalScored) { ahDraw(); ahRAF=requestAnimationFrame(ahLoop); return; }
 
-  // Trail (updated once per render frame, not per tick)
+  // ROOT-CAUSE FIX (slow puck): enforce constant speed once more AFTER all
+  // sub-steps so any floating-point drift across multiple iterations is
+  // corrected before the next frame reads the velocity.
+  ahLockPuckSpeed();
+
+  // Stuck rescue — check POST-physics speed (not the stale pre-step snapshot)
+  // so we only fire when the puck is genuinely near-stopped.
+  // Timeout reduced to 1 500 ms (was 3 000) for faster recovery.
+  var puckSpd=Math.sqrt(ahPuck.vx*ahPuck.vx+ahPuck.vy*ahPuck.vy);
+  if (puckSpd > ahPuckSpeed * 0.7) {
+    ahStuckTimer = 0; // moving at normal speed — keep timer clear
+  } else {
+    ahStuckTimer += dt;
+    if (ahStuckTimer > 1500) {
+      ahStuckTimer = 0;
+      // Rescue toward whichever goal is further away so play resumes quickly.
+      var rescueAngle = (Math.random()-0.5) * (Math.PI/3);
+      var rescueDir   = ahPuck.y < ahH/2 ? 1 : -1;
+      ahPuck.vx = Math.sin(rescueAngle) * ahPuckSpeed;
+      ahPuck.vy = rescueDir * Math.cos(rescueAngle) * ahPuckSpeed;
+      ahSnd.puckStart();
+    }
+  }
+
+  // Trail
   ahTrail.push({x:ahPuck.x,y:ahPuck.y});
-  var maxTrail=18;
+  var maxTrail=Math.max(8,Math.round(350/Math.max(dt,8)));
   if (ahTrail.length>maxTrail) ahTrail.shift();
 
-  // Speed lines (use puckSpd from last tick)
-  var puckSpd=Math.sqrt(ahPuck.vx*ahPuck.vx+ahPuck.vy*ahPuck.vy);
+  // Speed lines
   if (puckSpd>ahW*1.5&&Math.random()<0.4) {
     var angle=Math.atan2(ahPuck.vy,ahPuck.vx)+Math.PI;
     ahSpeedLines.push({x:ahPuck.x,y:ahPuck.y,angle:angle+(Math.random()-0.5)*0.5,
       len:8+Math.random()*20,life:1});
   }
-  var slDecay=9.0*(dt/1000);  // visual-only: use render dt
+  var slDecay=9.0*(dt/1000);
   for (var i=ahSpeedLines.length-1;i>=0;i--) {
     ahSpeedLines[i].life-=slDecay; if (ahSpeedLines[i].life<=0) ahSpeedLines.splice(i,1);
   }
 
   // Particles
-  var pDecay=2.2*(dt/1000), drag=Math.pow(0.88,dt/1000*60);  // visual-only
+  var pDecay=2.2*(dt/1000), drag=Math.pow(0.88,dt/1000*60);
   for (var i=ahParticles.length-1;i>=0;i--) {
     var p=ahParticles[i];
     p.x+=p.vx*(dt/1000); p.y+=p.vy*(dt/1000);
@@ -852,12 +716,14 @@ function ahDraw() {
     ctx.font='bold '+Math.round(W*0.042)+'px Orbitron,sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillStyle='rgba(255,255,255,0.85)'; ctx.shadowColor='#00e5ff'; ctx.shadowBlur=16;
-    var serveLabel = servingP1 ? '\u25b2 YOUR SERVE' : (ahMode==='pvp' ? '\u25bc P2 SERVE' : '\u25bc BOT SERVE');
-    ctx.fillText(serveLabel,W/2,servingP1?H*0.73:H*0.27);
+    // BUG 6 FIX: P2/bot serve previously showed just "▼ SERVE" — added
+    // context so both players know whose serve it is in every game mode.
+    var p2ServeLabel = ahMode==='pvb' ? '\u25bc BOT SERVE' : '\u25bc P2 SERVE';
+    ctx.fillText(servingP1?'\u25b2 YOUR SERVE':p2ServeLabel,W/2,servingP1?H*0.73:H*0.27);
     ctx.restore();
   }
 
-  // Pause overlay
+  // Pause
   if (ahPaused) {
     ctx.save();
     ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
@@ -909,11 +775,18 @@ function ahDraw() {
 
 // ── Keyboard ───────────────────────────────────────────────────
 (function(){
+  // P1 (bottom) → WASD.  P2/bot (top) → Arrow keys OR IJKL.
+  // BUG FIX: Arrow keys were previously mapped to p:0 (P1), which meant
+  // both WASD *and* Arrow keys drove P1 in PvP — P2 could only use IJKL.
+  // Now Arrow keys are mapped to p:1 so each player has their own controls.
+  // In PvB mode pressing Arrow keys still sets ahPaddles[1].key.*, but the
+  // keyboard-movement block is guarded by (ahMode==='pvp'), so it has no
+  // effect on the bot — safe and intentional.
   var keyMap={
-    'KeyW':{p:0,dir:'up'},'ArrowUp':{p:0,dir:'up'},
-    'KeyS':{p:0,dir:'dn'},'ArrowDown':{p:0,dir:'dn'},
-    'KeyA':{p:0,dir:'lt'},'ArrowLeft':{p:0,dir:'lt'},
-    'KeyD':{p:0,dir:'rt'},'ArrowRight':{p:0,dir:'rt'},
+    'KeyW':{p:0,dir:'up'},'ArrowUp':{p:1,dir:'up'},
+    'KeyS':{p:0,dir:'dn'},'ArrowDown':{p:1,dir:'dn'},
+    'KeyA':{p:0,dir:'lt'},'ArrowLeft':{p:1,dir:'lt'},
+    'KeyD':{p:0,dir:'rt'},'ArrowRight':{p:1,dir:'rt'},
     'KeyI':{p:1,dir:'up'},'KeyK':{p:1,dir:'dn'},
     'KeyJ':{p:1,dir:'lt'},'KeyL':{p:1,dir:'rt'}
   };
@@ -961,7 +834,7 @@ var ahHPMode='pvb', ahHPDiff='easy', ahHPWinScore=7;
     });
   });
   var mb=q('ah-main-back');   if (mb) mb.addEventListener('click',function(){if(typeof showHub==='function')showHub();});
-  var bb=q('ah-back-to-home');if (bb) bb.addEventListener('click',function(){showAH();});
+  var bb=q('ah-back-to-home');if (bb) bb.addEventListener('click',function(){if(typeof showAH==='function')showAH();});
   var sb=q('ah-hp-start');    if (sb) sb.addEventListener('click',startAHGame);
   var pb=q('ah-pause-btn');
   if (pb) pb.addEventListener('click',function(){
@@ -969,36 +842,7 @@ var ahHPMode='pvb', ahHPDiff='easy', ahHPWinScore=7;
   });
 })();
 
-// FIX 1: showAH was called from the game-over "← Menu" button (inline onclick)
-// and the back-to-home button listener, but was NEVER defined anywhere in this
-// file or in index.html — every click caused a ReferenceError crash.
-function showAH() {
-  ahStopLoop();
-  var homeEl = document.getElementById('ah-home');
-  var playEl = document.getElementById('ah-play-panel');
-  var ol     = document.getElementById('ah-overlay-msg');
-  var gf     = document.getElementById('ah-goal-flash');
-  if (playEl) playEl.classList.add('hidden');
-  if (homeEl) homeEl.classList.remove('hidden');
-  if (ol) { ol.style.display='none'; ol.className='ah-overlay-msg hidden'; }
-  if (gf) gf.style.display='none';
-  // Ensure the screen itself is visible (in case we are navigating from hub)
-  var screen = document.getElementById('screen-airhockey');
-  if (screen) {
-    document.querySelectorAll('[id^="screen-"]').forEach(function(s){
-      s.classList.add('hidden');
-    });
-    screen.classList.remove('hidden');
-  }
-  window.scrollTo(0,0);
-}
-window.showAH = showAH; // expose for hub card routing (SHOW_FNS map in index.html)
-
-// FIX 9: startAHGame now calls ahStopLoop() first. Previously, hitting "Play Again"
-// while any loop was still alive would start a second RAF alongside the first,
-// causing double-speed physics, doubled sound effects, and score corruption.
 function startAHGame(){
-  ahStopLoop();
   ahMode=ahHPMode; ahDiff=ahHPDiff; ahWinScore=ahHPWinScore;
   var homeEl=document.getElementById('ah-home'), playEl=document.getElementById('ah-play-panel');
   if (homeEl) homeEl.classList.add('hidden');

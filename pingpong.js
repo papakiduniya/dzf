@@ -21,6 +21,7 @@
   /* ── Runtime ────────────────────────────────────────────────── */
   var canvas, ctx, W, H, raf=null;
   var gameState='idle'; // idle|playing|serving|paused|over
+  var serveTimer=null; // serve-delay timeout — cleared on pause/stop
   var mode='bot', diff='med';
 
   var p1, p2, ball;
@@ -259,10 +260,15 @@
   }
 
   function startGame(){
-    resize(); resetScores(); updateLabels(); buildObjects();
-    botTick=0; calcBotTarget();
+    resize(); resetScores(); updateLabels();
+    // Build paddles only — ball launched via serve() for consistent delay
+    p1={x:pEdge,      y:H/2-pH/2, w:pW, h:pH};
+    p2={x:W-pEdge-pW, y:H/2-pH/2, w:pW, h:pH};
+    botTick=0;
     pointerY={p1:null,p2:null}; touchSide={};
-    showPanel('none'); gameState='playing'; startLoop();
+    showPanel('none');
+    // FIX PP-2: use serve() so first serve has same "GET READY" delay as subsequent ones
+    serve(Math.random()<0.5?1:-1);
   }
 
   function playAgain(){ startGame(); }
@@ -286,7 +292,10 @@
     showPanel('none'); gameState='playing'; startLoop();
   }
 
-  function stopLoop(){ if(raf){cancelAnimationFrame(raf);raf=null;} }
+  function stopLoop(){
+    if(raf){cancelAnimationFrame(raf);raf=null;}
+    if(serveTimer){clearTimeout(serveTimer);serveTimer=null;} // FIX PP-1: clear orphaned serve timeout
+  }
   function startLoop(){ if(!raf) raf=requestAnimationFrame(tick); }
 
   /* ── Score / Labels ─────────────────────────────────────────── */
@@ -302,6 +311,7 @@
   }
 
   /* ── Objects ────────────────────────────────────────────────── */
+  // buildObjects kept for reference — paddle init now inlined in startGame
   function buildObjects(){
     p1={x:pEdge,      y:H/2-pH/2, w:pW, h:pH};
     p2={x:W-pEdge-pW, y:H/2-pH/2, w:pW, h:pH};
@@ -317,7 +327,8 @@
   function tick(now){
     if(gameState==='playing'||gameState==='serving'){
       movePaddles(now);
-      if(gameState==='playing'){ moveBall(); if(flash>0)flash--; }
+      if(flash>0)flash--; // FIX PP-3: decrement flash in both states so score flash doesn't linger
+      if(gameState==='playing'){ moveBall(); }
       draw();
       raf=requestAnimationFrame(tick);
     } else {
@@ -407,9 +418,10 @@
 
   function serve(dir){
     gameState='serving'; startLoop();
-    setTimeout(function(){
+    serveTimer=setTimeout(function(){
+      serveTimer=null;
       if(gameState==='serving'){ launchBall(dir); gameState='playing'; botTick=0; calcBotTarget(); }
-    },700);
+    },700); // FIX PP-1: stored so stopLoop() can cancel it
   }
 
   function checkWin(){

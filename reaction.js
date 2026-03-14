@@ -150,6 +150,7 @@
 
   function rdPlayerTap(pid) {
     if (RD.over || el('rd-play').classList.contains('hidden')) return;
+    if (RD.mode === 'bot' && pid === 1) return; // FIX RD-1: block P2 keyboard tap in bot mode
 
     if (RD.phase === 'ready') {
       // False start!
@@ -190,8 +191,9 @@
     RD.phase = 'result';
     rdSetSignal('result');
 
-    if (winner === -1) {
+    if (winner === -1 || winner === null || winner === undefined) {
       setText('rd-status', '⏰ Nobody tapped — draw!');
+      // FIX RD-2: winner==-1 means nobody tapped; do NOT touch roundsWon[-1]
     } else {
       var names = ['Player 1', RD.mode === 'bot' ? 'Bot' : 'Player 2'];
       RD.roundsWon[winner]++;
@@ -215,14 +217,18 @@
     // BUG 5 FIX: the old code was `RD.roundsWon[0] > RD.roundsWon[1] ? 0 : 1`
     // which always picked Player 2 on a tie. Handle tie explicitly.
     if (RD.roundsWon[0] === RD.roundsWon[1]) {
-      el('rd-result-title').textContent  = '🤝 Draw!';
-      el('rd-result-detail').textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds (tied)';
+      // FIX RD-3+4: null-check all result elements before accessing
+    var rdTitle  = el('rd-result-title');
+    var rdDetail = el('rd-result-detail');
+    var rdResult = el('rd-result');
+    if (rdTitle)  rdTitle.textContent  = '🤝 Draw!';
+    if (rdDetail) rdDetail.textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds (tied)';
     } else {
       var winner = RD.roundsWon[0] > RD.roundsWon[1] ? 0 : 1;
-      el('rd-result-title').textContent  = '🏆 ' + names[winner] + ' Wins!';
-      el('rd-result-detail').textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds';
+      if (rdTitle)  rdTitle.textContent  = '🏆 ' + names[winner] + ' Wins!';
+      if (rdDetail) rdDetail.textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds';
     }
-    el('rd-result').classList.remove('hidden');
+    if (rdResult) rdResult.classList.remove('hidden');
     if (typeof SoundManager !== 'undefined' && SoundManager.win) SoundManager.win();
   }
 

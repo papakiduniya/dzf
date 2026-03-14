@@ -577,8 +577,6 @@
           if (mv.isCastle) {
             // Castling extra validation:
             // King must not be in check currently, must not pass through check
-            var backRow = r;
-            var kc = c;  // always 4
             if (isInCheck(state.board, color)) continue;  // in check → can't castle
 
             // Check pass-through and destination squares
@@ -805,14 +803,7 @@
 
     if (pt !== PIECE.PAWN) {
       san += pt.toUpperCase();
-      // Disambiguation
-      var ambig = allLegalMoves.filter(function (m) {
-        return m.tr === move.tr && m.tc === move.tc &&
-               m.fr !== move.fr && m.fc !== move.fc &&
-               state.board[m.fr][m.fc].type === pt &&
-               state.board[m.fr][m.fc].color === piece.color;
-      });
-      // Also include same-col or same-row movers
+      // Disambiguation: find other pieces of same type that can reach the same square
       var sameType = allLegalMoves.filter(function (m) {
         return m.tr === move.tr && m.tc === move.tc &&
                !(m.fr === move.fr && m.fc === move.fc) &&
@@ -977,7 +968,11 @@
    * isMaximizing: true = White tries to maximize, false = Black tries to minimize.
    */
   function minimax(state, depth, alpha, beta, isMaximizing) {
-    // Terminal / depth-0 check
+    // Fast leaf evaluation — skip expensive legal-move gen at depth 0
+    if (depth === 0) {
+      return { score: evaluate(state.board), move: null };
+    }
+
     var color    = isMaximizing ? COLOR.WHITE : COLOR.BLACK;
     var oppColor = isMaximizing ? COLOR.BLACK : COLOR.WHITE;
     var moves    = generateAllLegalMoves(state, color);
@@ -990,15 +985,17 @@
       return { score: 0, move: null }; // Stalemate
     }
 
-    if (depth === 0) {
-      return { score: evaluate(state.board), move: null };
-    }
-
-    // Move ordering: captures first (heuristic for better pruning)
+    // Improved move ordering for better alpha-beta pruning:
+    // promotions > captures (MVV-LVA: big piece captured by small = best) > quiet moves
     moves.sort(function (a, b) {
-      var aCapture = state.board[a.tr][a.tc].type ? MATERIAL[state.board[a.tr][a.tc].type] : 0;
-      var bCapture = state.board[b.tr][b.tc].type ? MATERIAL[state.board[b.tr][b.tc].type] : 0;
-      return bCapture - aCapture;
+      var aScore = 0, bScore = 0;
+      if (a.promo) aScore += 20000;
+      if (b.promo) bScore += 20000;
+      var aVictim = state.board[a.tr][a.tc].type;
+      var bVictim = state.board[b.tr][b.tc].type;
+      if (aVictim) aScore += MATERIAL[aVictim] * 10 - (MATERIAL[state.board[a.fr][a.fc].type] || 0);
+      if (bVictim) bScore += MATERIAL[bVictim] * 10 - (MATERIAL[state.board[b.fr][b.fc].type] || 0);
+      return bScore - aScore;
     });
 
     var bestMove  = moves[0];
@@ -1014,9 +1011,8 @@
         turn:            oppColor,
         castlingRights:  result.castlingRights,
         enPassantTarget: result.enPassantTarget,
-        halfMoveClock:   state.halfMoveClock,
-        positionHistory: state.positionHistory,
-        // Expose needed methods via prototype chain
+        halfMoveClock:   0,   // not needed for AI search
+        positionHistory: [],  // not needed for AI search — removed slice() (was O(n) per node)
         _positionKey:    ChessState.prototype._positionKey
       };
 
@@ -1043,31 +1039,31 @@
   }
 
   /**
-   * Public AI entry point.
-   * @param {ChessState} state     - Current game state
-   * @param {number}     depth     - Search depth (3 = medium, 4 = hard, 5 = very hard)
-   * @returns {object|null}        - Best move object or null if no moves
+   * Public AI entry point — iterative deepening with a hard time cap.
+   * Depth mapping (set by difficulty buttons):
+   *   easy=1, medium=2, hard=3, veryhard=4
+   * Every level uses iterative deepening so we always have a fallback
+   * move ready even if the time cap fires mid-search.
    */
   function getBestMove(state, depth) {
-    var isMax  = (state.turn === COLOR.WHITE);
-    // For deep searches (depth >= 5), use iterative deepening with time limit
-    if (depth >= 5) {
-      var timeLimit = 800; // capped at 800ms so it feels responsive
-      var startTime = Date.now();
-      var bestResult = null;
-      var maxDepth = Math.min(depth, 4); // cap at depth 4 for mobile performance
-      // Iterative deepening: search at increasing depths
-      for (var d = 2; d <= maxDepth; d++) {
-        if (Date.now() - startTime > timeLimit) break;
-        var r = minimax(state, d, -Infinity, Infinity, isMax);
-        if (r && r.move) bestResult = r;
-        // If we found a forced mate, stop early
-        if (bestResult && Math.abs(bestResult.score) > 900000) break;
-      }
-      return bestResult ? (bestResult.move || null) : null;
+    var isMax = (state.turn === COLOR.WHITE);
+    // Time budgets per difficulty (ms). Keeps the UI always responsive.
+    var timeBudgets = { 1: 200, 2: 400, 3: 700, 4: 1200 };
+    var timeLimit   = timeBudgets[depth] || 500;
+    var startTime   = Date.now();
+    var bestResult  = null;
+
+    // Iterative deepening: start at depth 1, go up to requested depth.
+    // This guarantees we always return the best move found so far even
+    // if time runs out before completing the deepest search.
+    for (var d = 1; d <= depth; d++) {
+      if (Date.now() - startTime > timeLimit) break;
+      var r = minimax(state, d, -Infinity, Infinity, isMax);
+      if (r && r.move) bestResult = r;
+      // Stop early on forced mate
+      if (bestResult && Math.abs(bestResult.score) > 90000) break;
     }
-    var result = minimax(state, depth || 3, -Infinity, Infinity, isMax);
-    return result.move || null;
+    return bestResult ? (bestResult.move || null) : null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1085,23 +1081,34 @@
   ChessState.prototype.undoMove = function () {
     if (this.moveHistory.length === 0) return false;
 
-    // BUG 2 FIX: loadFEN() resets moveHistory to [] internally, so we must
-    // capture the trimmed history BEFORE calling loadFEN, not after.
-    var prevFenIdx = this.moveHistory.length - 1;
-    var prevFen    = prevFenIdx > 0 ? this.moveHistory[prevFenIdx - 1].fen : null;
-
-    // Slice off the last entry BEFORE loadFEN so the saved array is correct
+    // Capture the trimmed history BEFORE calling loadFEN (loadFEN resets it to [])
+    var prevFenIdx      = this.moveHistory.length - 1;
+    var prevFen         = prevFenIdx > 0 ? this.moveHistory[prevFenIdx - 1].fen : null;
     var restoredHistory = this.moveHistory.slice(0, prevFenIdx);
 
-    this.positionHistory.pop();
     this.gameOver       = false;
     this.winner         = null;
     this.gameOverReason = null;
 
     if (prevFen) {
       this.loadFEN(prevFen);
-      // Restore the trimmed history (loadFEN wiped it to [])
+      // Restore the trimmed move history (loadFEN wiped it to [])
       this.moveHistory = restoredHistory;
+      // Rebuild positionHistory without creating full ChessState objects (FIX H: was O(n) heavy)
+      // The current state after loadFEN already has the correct position key as its first entry.
+      // We just need to prepend the initial position key and append keys for all prior moves.
+      this.positionHistory = [_computeStartPositionKey()];
+      for (var hi = 0; hi < restoredHistory.length; hi++) {
+        this.positionHistory.push(_positionKeyFromFEN(restoredHistory[hi].fen));
+      }
+      // FIX 6: Rebuild capturedPieces from the restored move history
+      this.capturedPieces = { w: [], b: [] };
+      for (var ci = 0; ci < restoredHistory.length; ci++) {
+        var mr = restoredHistory[ci];
+        if (mr.captured) {
+          this.capturedPieces[mr.color].push(mr.captured.type);
+        }
+      }
     } else {
       // Undo to start position
       this.board = createEmptyBoard();
@@ -1117,6 +1124,62 @@
     }
     return true;
   };
+
+  // Compute a position key from a FEN string without creating a full ChessState.
+  // Used by undoMove to cheaply rebuild positionHistory.
+  function _positionKeyFromFEN(fen) {
+    var parts  = fen.trim().split(/s+/);
+    var ranks  = parts[0].split('/');
+    var board  = createEmptyBoard();
+    for (var r = 0; r < 8; r++) {
+      var rank = ranks[7 - r]; var c = 0;
+      for (var i = 0; i < rank.length; i++) {
+        var ch = rank[i], num = parseInt(ch, 10);
+        if (!isNaN(num)) { c += num; }
+        else { board[r][c] = makeSquare(ch.toLowerCase(), ch === ch.toUpperCase() ? COLOR.WHITE : COLOR.BLACK, true); c++; }
+      }
+    }
+    var turn = (parts[1] === 'b') ? COLOR.BLACK : COLOR.WHITE;
+    var crStr = parts[2] || '-';
+    var cr = (crStr.indexOf('K')!==-1?'K':'') + (crStr.indexOf('Q')!==-1?'Q':'') +
+             (crStr.indexOf('k')!==-1?'k':'') + (crStr.indexOf('q')!==-1?'q':'') || '-';
+    var ep = (parts[3] && parts[3] !== '-') ? parts[3] : '-';
+    // Build rank strings (FEN order: rank 8 first)
+    var rowParts = [];
+    for (var rr = 7; rr >= 0; rr--) {
+      var empty = 0, rs = '';
+      for (var cc = 0; cc < 8; cc++) {
+        var sq = board[rr][cc];
+        if (!sq.type) { empty++; }
+        else { if (empty) { rs += empty; empty = 0; } rs += sq.color === COLOR.WHITE ? sq.type.toUpperCase() : sq.type; }
+      }
+      if (empty) rs += empty;
+      rowParts.push(rs);
+    }
+    return rowParts.join('/') + ' ' + turn + ' ' + cr + ' ' + ep;
+  }
+
+  // Cached start-position key (computed once at module load time)
+  var _startPositionKey = null;
+  function _computeStartPositionKey() {
+    if (!_startPositionKey) {
+      var tmp = createEmptyBoard();
+      setupStartPosition(tmp);
+      var rowParts = [];
+      for (var rr = 7; rr >= 0; rr--) {
+        var empty = 0, rs = '';
+        for (var cc = 0; cc < 8; cc++) {
+          var sq = tmp[rr][cc];
+          if (!sq.type) { empty++; }
+          else { if (empty) { rs += empty; empty = 0; } rs += sq.color === COLOR.WHITE ? sq.type.toUpperCase() : sq.type; }
+        }
+        if (empty) rs += empty;
+        rowParts.push(rs);
+      }
+      _startPositionKey = rowParts.join('/') + ' w KQkq -';
+    }
+    return _startPositionKey;
+  }
 
   /** Returns true if the current player is in check. */
   ChessState.prototype.isInCheck = function () {
@@ -1145,7 +1208,7 @@
     mode:            'pvp',
     botColor:        COLOR.BLACK,
     playerColor:     COLOR.WHITE,
-    botDepth:        3,
+    botDepth:        2,  // default = medium (depth 2 ≈ 400ms max)
     selectedSq:      null,
     legalTargets:    [],
     animating:       false,
@@ -1346,6 +1409,7 @@
 
   function chessRenderBoard() {
     if (!chessBoardEl) return;
+    if (!chess.state) return;  // FIX E: guard against render before game is initialised
     chessBoardEl.innerHTML = '';
     var state = chess.state;
 
@@ -1409,7 +1473,8 @@
         }
 
         // Check highlight on king in check — strong red flash
-        if (sq.type === PIECE.KING && isInCheck(state.board, sq.color) && !state.gameOver) {
+        // Only highlight the king of the side currently to move (never the opponent's king)
+        if (sq.type === PIECE.KING && sq.color === state.turn && isInCheck(state.board, sq.color) && !state.gameOver) {
           cell.classList.add('chess-in-check');
           // Add pulsing ring element
           var checkRing = document.createElement('div');
@@ -1568,25 +1633,34 @@
 
     var mv = result.move;
 
-    // Sound effects
-    if (mv.isCastle) {
-      ChessAudio.castle();
-    } else if (mv.captured) {
-      ChessAudio.capture();
-      // Particles on capture cell
-      var captureCell = chessBoardEl
+    // Capture cell coords BEFORE innerHTML is wiped by chessRenderBoard
+    // (FIX A: particles were spawned from a stale element already removed from DOM)
+    var captureParticleCell = null;
+    if (mv.captured) {
+      captureParticleCell = chessBoardEl
         ? chessBoardEl.querySelector('[data-r="' + tr + '"][data-c="' + tc + '"]')
         : null;
-      chessSpawnParticles(captureCell, mv.color === COLOR.WHITE ? COLOR.BLACK : COLOR.WHITE);
-      chessBoardFlash('capture');
-    } else if (promo) {
+    }
+
+    // Sound effects — check promo before captured so promo-captures play promote sound
+    if (mv.isCastle) {
+      ChessAudio.castle();
+    } else if (promo || mv.promo) {   // mv.promo catches bot promotions (promo param may be null)
       ChessAudio.promote();
+    } else if (mv.captured) {
+      ChessAudio.capture();
+      chessBoardFlash('capture');
     } else {
       ChessAudio.move();
     }
 
     chessRenderBoard();
     chessUpdateStatus();
+
+    // Spawn particles AFTER render using coordinates saved from the old cell
+    if (captureParticleCell) {
+      chessSpawnParticles(captureParticleCell, mv.color === COLOR.WHITE ? COLOR.BLACK : COLOR.WHITE);
+    }
 
     // Check sound / flash after render
     if (!result.gameOver && result.inCheck) {
@@ -1639,6 +1713,19 @@
       };
       grid.appendChild(btn);
     });
+    // Escape key dismisses modal and cancels the promotion (piece stays, move not made)
+    function onPromoEscape(e) {
+      if (e.key === 'Escape') {
+        chess.promotionPending = null;
+        chessPromoModal.classList.add('hidden');
+        chess.selectedSq   = null;
+        chess.legalTargets = [];
+        chessRenderBoard();
+        document.removeEventListener('keydown', onPromoEscape);
+      }
+    }
+    document.addEventListener('keydown', onPromoEscape);
+
     chessPromoModal.appendChild(grid);
     chessPromoModal.classList.remove('hidden');
   }
@@ -1648,8 +1735,9 @@
   function chessScheduleBotMove() {
     chess.botThinking = true;
     chessUpdateStatus();
-    // Reduce UI delay for deep calculations since the search itself takes time
-    var delay = chess.botDepth >= 5 ? 150 : 350 + Math.random() * 350;
+    // Minimal delay — just enough to let the board repaint before the search runs.
+    // The search time itself is the perceived "thinking time".
+    var delay = 80;
     chess._botTimeout = setTimeout(function () {
       // Wrap in try/catch so errors don't freeze the game
       try {
@@ -1680,10 +1768,14 @@
     if (reason === 'checkmate') {
       if (state.winner === COLOR.WHITE) {
         icon  = '♔'; title = 'White Wins!';
-        ChessAudio.win();
+        // FIX 2: play lose() if the human player lost (bot mode, human is Black)
+        if (chess.mode === 'bot' && chess.playerColor === COLOR.BLACK) ChessAudio.lose();
+        else ChessAudio.win();
       } else {
         icon  = '♚'; title = 'Black Wins!';
-        ChessAudio.win();
+        // FIX 2: play lose() if the human player lost (bot mode, human is White)
+        if (chess.mode === 'bot' && chess.playerColor === COLOR.WHITE) ChessAudio.lose();
+        else ChessAudio.win();
       }
       detail = 'Checkmate';
     } else {
@@ -1708,12 +1800,14 @@
 
   function chessStartGame() {
     if (chess._botTimeout) { clearTimeout(chess._botTimeout); chess._botTimeout = null; }
+    if (chess.hintTimeout) { clearTimeout(chess.hintTimeout); chess.hintTimeout = null; }
     chess.state            = new ChessState();
     chess.selectedSq       = null;
     chess.legalTargets     = [];
     chess.animating        = false;
     chess.botThinking      = false;
     chess.promotionPending = null;
+    chess.hintMove         = null;   // FIX G: clear stale hint on new game
 
     // Flip board if player chose Black
     chess.flipped = (chess.mode === 'bot' && chess.playerColor === COLOR.BLACK);
@@ -1723,14 +1817,14 @@
     if (chessHomePanel)  chessHomePanel.classList.add('hidden');
     if (chessPlayPanel)  chessPlayPanel.classList.remove('hidden');
 
-    chessRenderBoard();
-    chessUpdateStatus();
-    ChessAudio.gameStart();
-
-    // In bot mode the bot is the opposite of the player color
+    // FIX D: set botColor BEFORE rendering so chessUpdateStatus shows correct label
     if (chess.mode === 'bot') {
       chess.botColor = (chess.playerColor === COLOR.WHITE) ? COLOR.BLACK : COLOR.WHITE;
     }
+
+    chessRenderBoard();
+    chessUpdateStatus();
+    ChessAudio.gameStart();
 
     if (chess.mode === 'bot' && chess.botColor === COLOR.WHITE) {
       chessScheduleBotMove();
@@ -1739,8 +1833,11 @@
 
   function chessResetGame() {
     if (chess._botTimeout) { clearTimeout(chess._botTimeout); chess._botTimeout = null; }
+    if (chess.hintTimeout) { clearTimeout(chess.hintTimeout); chess.hintTimeout = null; }
     chess.botThinking      = false;
+    chess.animating        = false;  // FIX C: was never reset, could freeze board
     chess.promotionPending = null;
+    chess.hintMove         = null;   // FIX G: clear stale hint
     chess.state            = new ChessState();
     chess.selectedSq       = null;
     chess.legalTargets     = [];
@@ -1751,6 +1848,7 @@
 
     chessRenderBoard();
     chessUpdateStatus();
+    ChessAudio.gameStart(); // FIX 4: play start sound on reset too
 
     if (chess.mode === 'bot' && chess.botColor === COLOR.WHITE) {
       chessScheduleBotMove();
@@ -1798,7 +1896,12 @@
       btn.addEventListener('click', function () {
         chessDiffBtns.forEach(function (b) { b.classList.remove('active'); });
         btn.classList.add('active');
-        chess.botDepth = parseInt(btn.dataset.depth, 10) || 3;
+        // Remap HTML data-depth values to fast search depths:
+        // data-depth 1→1(easy), 2→2(medium), 3→3(hard), 4+→4(veryhard)
+        // Also handle legacy values: 3→2, 4→3, 5→4
+        var rawDepth = parseInt(btn.dataset.depth, 10) || 2;
+        var depthMap = { 1:1, 2:2, 3:3, 4:4, 5:4, 6:4 };
+        chess.botDepth = depthMap[rawDepth] || Math.min(rawDepth, 4);
       });
     });
 
@@ -1821,7 +1924,7 @@
       chess.botThinking = false;
       if (chessHomePanel) chessHomePanel.classList.remove('hidden');
       if (chessPlayPanel) chessPlayPanel.classList.add('hidden');
-      if (SoundManager) SoundManager.backToHub();
+      if (SoundManager && typeof SoundManager.backToHub === 'function') SoundManager.backToHub();
     });
 
     if (chessResetBtn) chessResetBtn.addEventListener('click', function () {

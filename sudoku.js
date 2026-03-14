@@ -555,14 +555,15 @@
     }
 
     if (board[selected]===d) return;
+    // FIX BUG-5: only count a new error if the cell was not already wrong
+    // (prevents extra error-increments when overwriting one wrong digit with another)
+    const _wasAlreadyWrong = board[selected]!==0 && board[selected]!==solution[selected];
     pushHistory(selected, board[selected], new Set(notes[selected]));
     notes[selected].clear();
     board[selected] = d;
 
     if (d !== solution[selected]) {
-      errors++;
-      updateHearts();
-      buzz();
+      if (!_wasAlreadyWrong) { errors++; updateHearts(); buzz(); }
       refreshCell(selected);
       if (errors >= MAX_ERR) { done=true; stopTimer(); showResult(false); }
     } else {
@@ -573,10 +574,13 @@
       for(let i=0;i<9;i++){peers.add(r*9+i);peers.add(i*9+c);}
       for(let rr=br;rr<br+3;rr++)for(let cc=bc;cc<bc+3;cc++)peers.add(rr*9+cc);
       peers.forEach(pi=>{if(notes[pi].has(d)){notes[pi].delete(d);refreshCell(pi);}});
-      flashCorrect(selected);
     }
 
-    refreshCell(selected);
+    refreshCell(selected); // note: applyGivenClass inside adds 'user-entry' if correct
+    // FIX BUG-1: check if correct AFTER refreshCell (class is set), then flash
+    if (board[selected] === solution[selected] && !given[selected] && board[selected] !== 0) {
+      flashCorrect(selected);
+    }
     refreshNumpad();
     highlight();
 
@@ -607,6 +611,13 @@
     if(!history.length) return;
     const {idx,val,n}=history.pop();
     board[idx]=val; notes[idx]=n;
+    // FIX BUG-3: recalculate errors from the actual board so undoing a mistake
+    // correctly restores the error count and heart display
+    errors=0;
+    for(let i=0;i<81;i++){
+      if(!given[i]&&board[i]!==0&&board[i]!==solution[i]) errors++;
+    }
+    updateHearts();
     refreshCell(idx); refreshNumpad(); highlight();
   }
 
@@ -625,6 +636,12 @@
     pushHistory(t,board[t],new Set(notes[t]));
     board[t]=solution[t]; notes[t].clear();
     selected=t;
+    // FIX BUG-4: clear revealed digit from peer cell notes (same row/col/box)
+    const _d=solution[t], _r=t/9|0, _c=t%9, _br=(_r/3|0)*3, _bc=(_c/3|0)*3;
+    const _peers=new Set();
+    for(let _i=0;_i<9;_i++){_peers.add(_r*9+_i);_peers.add(_i*9+_c);}
+    for(let _rr=_br;_rr<_br+3;_rr++)for(let _cc=_bc;_cc<_bc+3;_cc++)_peers.add(_rr*9+_cc);
+    _peers.forEach(_pi=>{if(_pi!==t&&notes[_pi].has(_d)){notes[_pi].delete(_d);refreshCell(_pi);}});
     refreshCell(t); refreshNumpad(); highlight();
 
     const cell=document.querySelector(`.sdk-cell[data-idx="${t}"]`);
@@ -701,9 +718,11 @@
   function showResult(won){
     const res=$('sdk-result');
     if(!res) return;
-    $('sdk-result-emoji').textContent = won?'🏆':'💀';
-    $('sdk-result-title').textContent  = won?'PUZZLE SOLVED!':'GAME OVER';
-    $('sdk-result-detail').textContent = won
+    // FIX BUG-2: null-check each element before setting textContent
+    const emojiEl=$('sdk-result-emoji'), titleEl=$('sdk-result-title'), detailEl=$('sdk-result-detail');
+    if(emojiEl)  emojiEl.textContent  = won?'🏆':'💀';
+    if(titleEl)  titleEl.textContent  = won?'PUZZLE SOLVED!':'GAME OVER';
+    if(detailEl) detailEl.textContent = won
       ? `${diff.toUpperCase()} · ${fmt(timerSec)} · ${errors} mistake${errors!==1?'s':''}`
       : 'Too many mistakes! Try again.';
     res.classList.remove('hidden');
