@@ -4925,8 +4925,11 @@ if (document.readyState === 'loading') {
            Only stop loops if on the hub (no active game). */
         var activeScreen = document.querySelector('[id^="screen-"]:not(.hidden):not(#screen-hub)');
         if (!activeScreen) {
-          /* On hub in landscape — stop any lingering game loops */
-          window.DZ_PAUSED = true;
+          /* On hub in landscape — stop any lingering game loops.
+             Do NOT set DZ_PAUSED here. That flag is owned exclusively
+             by the in-game menu system. Setting it here froze every
+             game on desktop/landscape because it was never cleared
+             before ahLoop started. */
           if (typeof window.dzPauseAllGames === 'function') {
             try { window.dzPauseAllGames(); } catch(e) {}
           } else {
@@ -4944,8 +4947,13 @@ if (document.readyState === 'loading') {
         setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 100);
 
       } else {
-        /* Portrait: clear DZ_PAUSED flag */
-        window.DZ_PAUSED = false;
+        /* Portrait: clear DZ_PAUSED only if the in-game menu isn't open.
+           Unconditionally clearing it would resume a legitimately paused game. */
+        var menuOpen = (function(){
+          var m = document.getElementById('dz-ig-menu');
+          return m && m.classList.contains('open');
+        })();
+        if (!menuOpen) window.DZ_PAUSED = false;
       }
     }
 

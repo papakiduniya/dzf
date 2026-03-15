@@ -3938,6 +3938,7 @@ function ahResetPositions(serveWho) {
   ahPaddles[1].pvx = ahPaddles[1].pvy = 0;
   ahServeWho    = serveWho;
   ahGoalFreezeMs = 1300;  // 1.3 seconds, fully time-based
+  ahStuckTimer  = 0;      // prevent rescue nudge firing immediately after a goal
   // BUG FIX: serve velocity in px/second; give it a real angle
   // dir= -1 → puck launches upward (toward bot goal) when P1 serves
   // dir= +1 → puck launches downward (toward P1 goal) when bot serves
@@ -4197,7 +4198,13 @@ function ahShowGoalFlash(who) {
   el.className = 'ah-goal-flash ah-goal-flash--' + (who === 0 ? 'p1' : 'p2');
   el.textContent = '⚡ GOAL!';
   el.style.display = 'flex';
-  setTimeout(function() { el.style.display = 'none'; }, 1100);
+  // Clear any previous timer so a rapid second goal doesn't
+  // get hidden early by the first goal's outstanding setTimeout.
+  if (el._flashTimer) clearTimeout(el._flashTimer);
+  el._flashTimer = setTimeout(function() {
+    el.style.display = 'none';
+    el._flashTimer = null;
+  }, 1100);
 }
 
 function ahGameOver(winner) {
@@ -4260,9 +4267,10 @@ function ahLoop(ts) {
   // ── Goal-freeze countdown (ms-based, frame-rate independent) ──
   if (ahGoalFreezeMs > 0) {
     ahGoalFreezeMs -= dt;
-    // BUG FIX: also clamp paddles during freeze so neither player crosses centre
+    // Clamp both paddles during freeze — prevents bot drifting in PvB
+    // and stops either player crossing centre in PvP.
     ahClampPaddle(ahPaddles[0], 0);
-    if (ahMode === 'pvp') ahClampPaddle(ahPaddles[1], 1);
+    ahClampPaddle(ahPaddles[1], 1);
     if (ahGoalFreezeMs <= 0) {
       ahGoalFreezeMs = 0;
       if (ahPuck.vServe) {
@@ -4278,33 +4286,32 @@ function ahLoop(ts) {
   // Move bot paddle (dt-based, px/s)
   ahMoveBot(dt);
 
-  // ── Keyboard: P1 ── BUG FIX: dt-based speed in px/s, not px/frame ──
-  var kSpd = ahW * 1.35 * (dt / 1000); // px for this frame
-  var p0   = ahPaddles[0];
-  if (p0.key.up) { p0.pvy = -kSpd; p0.y += p0.pvy; }
-  else if (p0.key.dn) { p0.pvy = kSpd; p0.y += p0.pvy; }
+  // ── Keyboard: P1 ─────────────────────────────────────────────
+  // kSpdPS = paddle speed in px/s (used for collision response).
+  // kStep  = pixels to move this frame = kSpdPS * dt/1000.
+  // pvx/pvy must be px/s so ahResolvePaddlePuck() imparts correct momentum.
+  // Previously pvx was set to px/frame then divided by (dt/1000) — circular,
+  // producing ahW*1.35 regardless of dt and causing erratic hit response.
+  var kSpdPS = ahW * 1.35;              // px/s — constant, frame-rate independent
+  var kStep  = kSpdPS * (dt / 1000);   // px to move this frame
+  var p0 = ahPaddles[0];
+  if (p0.key.up) { p0.y -= kStep; p0.pvy = -kSpdPS; }
+  else if (p0.key.dn) { p0.y += kStep; p0.pvy = kSpdPS; }
   else { p0.pvy = 0; }
-  if (p0.key.lt) { p0.pvx = -kSpd; p0.x += p0.pvx; }
-  else if (p0.key.rt) { p0.pvx = kSpd; p0.x += p0.pvx; }
+  if (p0.key.lt) { p0.x -= kStep; p0.pvx = -kSpdPS; }
+  else if (p0.key.rt) { p0.x += kStep; p0.pvx = kSpdPS; }
   else { p0.pvx = 0; }
-  // Convert px/frame to px/s for collision response
-  p0.pvx = dt > 0 ? p0.pvx / (dt / 1000) : 0;
-  p0.pvy = dt > 0 ? p0.pvy / (dt / 1000) : 0;
   ahClampPaddle(p0, 0);
-  // Re-read actual pixel delta for pvx/pvy after clamp (re-scale to px/s)
-  // (already done above — pvx/pvy are now px/s)
 
   // ── Keyboard: P2 (PvP only) ───────────────────────────────
   if (ahMode === 'pvp') {
     var p1 = ahPaddles[1];
-    if (p1.key.up) { p1.pvy = -kSpd; p1.y += p1.pvy; }
-    else if (p1.key.dn) { p1.pvy = kSpd; p1.y += p1.pvy; }
+    if (p1.key.up) { p1.y -= kStep; p1.pvy = -kSpdPS; }
+    else if (p1.key.dn) { p1.y += kStep; p1.pvy = kSpdPS; }
     else { p1.pvy = 0; }
-    if (p1.key.lt) { p1.pvx = -kSpd; p1.x += p1.pvx; }
-    else if (p1.key.rt) { p1.pvx = kSpd; p1.x += p1.pvx; }
+    if (p1.key.lt) { p1.x -= kStep; p1.pvx = -kSpdPS; }
+    else if (p1.key.rt) { p1.x += kStep; p1.pvx = kSpdPS; }
     else { p1.pvx = 0; }
-    p1.pvx = dt > 0 ? p1.pvx / (dt / 1000) : 0;
-    p1.pvy = dt > 0 ? p1.pvy / (dt / 1000) : 0;
     ahClampPaddle(p1, 1);
   }
 
@@ -4753,6 +4760,9 @@ var ahHPMode = 'pvb', ahHPDiff = 'easy', ahHPWinScore = 7;
 })();
 
 function startAHGame() {
+  // Stop any running loop first — prevents orphaned RAF handles
+  if (typeof ahStopLoop === 'function') ahStopLoop();
+
   ahMode = ahHPMode; ahDiff = ahHPDiff; ahWinScore = ahHPWinScore;
   document.getElementById('ah-home').classList.add('hidden');
   document.getElementById('ah-play-panel').classList.remove('hidden');
@@ -4761,7 +4771,13 @@ function startAHGame() {
   ol.style.display = 'none'; ol.className = 'ah-overlay-msg hidden';
   var gf = document.getElementById('ah-goal-flash');
   if (gf) gf.style.display = 'none';
+
+  // CRITICAL: clear both pause flags before starting the loop.
+  // DZ_PAUSED may be true from the orientation handler, a previous
+  // menu open, or game-switching. If true when ahLoop starts it freezes.
   ahPaused = false;
+  window.DZ_PAUSED = false;
+
   document.getElementById('ah-pause-btn').textContent = '⏸';
   ahInit();
   ahRunning = true;
@@ -7925,6 +7941,14 @@ function dzPauseAllGames() {
 function dzStopAllGames() {
   // Full stop — pause everything then also kill the Air Hockey RAF loop
   dzPauseAllGames();
+
+  // ── CRITICAL: reset the global pause flag and audio ──────────
+  // dzPauseAllGames() sets DZ_PAUSED=true (correct for menu-open).
+  // dzStopAllGames() is also called during game-to-game navigation,
+  // so we must clear DZ_PAUSED immediately or the incoming game's
+  // RAF loop hits `if (window.DZ_PAUSED) return` and never runs.
+  window.DZ_PAUSED = false;
+  dzResumeAllAudio();
 
   // Air Hockey: stop RAF loop entirely (not just paused flag)
   if (typeof ahStopLoop === 'function') ahStopLoop();
