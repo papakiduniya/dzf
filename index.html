@@ -4737,16 +4737,23 @@ if (document.readyState === 'loading') {
     function checkOrientation() {
       var isLandscape = window.innerWidth > window.innerHeight;
       if (isLandscape) {
-        /* ── Force-hide fixed game panels so they don't render in landscape ── */
+        /* ── Hide ALL game screens (everything except the hub) ── */
+        document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
+          if (s.id !== 'screen-hub') {
+            s.style.display = 'none';
+          }
+        });
+
+        /* ── Hide fixed game panels (position:fixed escapes parent display:none) ── */
         document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
-          p.classList.add('hidden');
+          p.style.display = 'none';
           p.style.visibility = 'hidden';
           p.style.pointerEvents = 'none';
         });
         var tp = document.getElementById('tetris-play');
-        if (tp) { tp.classList.add('hidden'); tp.style.visibility = 'hidden'; tp.style.pointerEvents = 'none'; }
+        if (tp) { tp.style.display = 'none'; tp.style.visibility = 'hidden'; tp.style.pointerEvents = 'none'; }
 
-        /* ── Stop all game loops — user must press ▶ START to resume ── */
+        /* ── Stop all game loops ── */
         window.DZ_PAUSED = true;
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
@@ -4759,13 +4766,19 @@ if (document.readyState === 'loading') {
           });
         }
       } else {
-        /* ── Portrait: restore inline styles, keep .hidden intact ── */
+        /* ── Portrait: clear the inline display:none we set, restore flow ── */
+        document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
+          if (s.id !== 'screen-hub') {
+            s.style.display = '';
+          }
+        });
         document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
+          p.style.display = '';
           p.style.visibility = '';
           p.style.pointerEvents = '';
         });
         var tp = document.getElementById('tetris-play');
-        if (tp) { tp.style.visibility = ''; tp.style.pointerEvents = ''; }
+        if (tp) { tp.style.display = ''; tp.style.visibility = ''; tp.style.pointerEvents = ''; }
         window.DZ_PAUSED = false;
       }
     }

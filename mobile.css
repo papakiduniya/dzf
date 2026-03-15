@@ -1137,12 +1137,24 @@
 /* ── Landscape: no overlay, no scroll block. Hub is fully scrollable.
    Only game panels are hidden (via JS + CSS below). ── */
 @media (orientation: landscape) {
-  /* Hide fixed game panels behind canvases — these are stopped by JS too */
+
+  /* Hide ALL game screens except the hub — they must never show in landscape.
+     This covers both .hidden screens in document flow AND any screen that
+     lost its .hidden class while being moved by mobile.js wrapper logic. */
+  [id^="screen-"]:not(#screen-hub) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Hide fixed game panels (tetris-play, rd-play, carrom-play, sdk-play)
+     — position:fixed escapes display:none on parents, needs explicit hide */
   #tetris-play,
   [data-dz-game-panel] {
+    display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
   }
+
   /* Freeze active canvases so no game renders behind the hub */
   canvas {
     visibility: hidden !important;
@@ -1221,18 +1233,12 @@
 }
 
 /* ── CRITICAL: In landscape, force-hide tetris-play and all fixed game panels ──
-   position:fixed elements escape overflow:hidden on parents, so they bleed
-   through the portrait lock overlay. Explicitly hide them with visibility. */
+   position:fixed elements escape display:none on parents — must be hidden directly. */
 @media (orientation: landscape) {
 
-  /* Hide tetris-play specifically — this is the panel seen in the screenshot */
-  #tetris-play {
-    visibility: hidden !important;
-    pointer-events: none !important;
-  }
-
-  /* Hide ALL fixed-position game panels using the data attribute we added */
+  #tetris-play,
   [data-dz-game-panel] {
+    display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
   }
