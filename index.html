@@ -27,16 +27,7 @@
 </head>
 <body>
 
-  <!-- ══ Portrait / Rotate-Phone Warning Overlay ══
-       Shown via CSS on portrait+mobile, JS can also toggle it.
-       Tap "Skip" to dismiss for the session. -->
-  <div id="dz-portrait-warn" role="dialog" aria-modal="true" aria-label="Please rotate your device">
-    <div class="pw-icon">📱</div>
-    <div class="pw-accent-line"></div>
-    <div class="pw-title">Rotate Your Phone</div>
-    <div class="pw-sub">DuelZone games are designed for landscape (horizontal) view.</div>
-    <button class="pw-skip" id="dz-pw-skip">Play in Portrait Anyway</button>
-  </div>
+  <!-- Portrait warn overlay removed — landscape scrolling enabled -->
 
   <!-- ══ Interstitial Ad Overlay ══
        Shown every 3–4 hub navigations. Skippable after 5 seconds. -->
@@ -4734,81 +4725,28 @@ if (document.readyState === 'loading') {
   })();
   </script>
 
-  <!-- ══ Portrait Lock — hard vertical-only enforcement ══ -->
-  <!--
-    WHY: Games are designed for portrait. In landscape on a phone:
-      • canvas-based games render at the wrong aspect ratio
-      • fixed-position panels (tetris-play, rd-play, etc.) bleed
-        through at landscape dimensions even while a soft overlay
-        is shown (z-index race + position:fixed escapes parents)
-    SOLUTION:
-      1. screen.orientation.lock('portrait') — silently ignored if
-         the browser requires fullscreen first; we try anyway.
-      2. #dz-portrait-lock overlay: position:fixed, z-index max,
-         NO skip button — hard block, not a soft hint.
-      3. CSS backup in mobile.css §10: overflow:hidden on html/body
-         in landscape so no canvas can scroll into view.
-  -->
+  <!-- ══ Orientation handler — stops game loops on landscape, no overlay/lock ══ -->
   <script>
   (function () {
     'use strict';
 
-    /* ── Create the hard-lock overlay ── */
-    var lock = document.getElementById('dz-portrait-lock');
-    if (!lock) {
-      lock = document.createElement('div');
-      lock.id = 'dz-portrait-lock';
-      lock.setAttribute('aria-live', 'assertive');
-      lock.setAttribute('role', 'alert');
-      lock.innerHTML =
-        '<div class="dz-pl-icon">📱</div>' +
-        '<div class="dz-pl-title">Rotate Your Device</div>' +
-        '<div class="dz-pl-sub">DuelZone is designed for portrait mode.<br>' +
-        'Please rotate your phone upright to play.</div>';
-      document.body.appendChild(lock);
-    }
+    /* Landscape is now ALLOWED — hub page is fully scrollable in landscape.
+       We only stop active game loops so nothing runs in the background.
+       No overlay, no scroll block, no "rotate your phone" message. */
 
-    /* ── Try to lock orientation at the OS level ── */
-    function tryLockPortrait() {
-      try {
-        if (screen.orientation && typeof screen.orientation.lock === 'function') {
-          screen.orientation.lock('portrait').catch(function () {
-            /* Silently ignore — browsers require fullscreen first */
-          });
-        }
-      } catch (e) {}
-    }
-
-    /* ── Detect touch device ── */
-    function isTouch() {
-      return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    }
-
-    /* ── PORTRAIT-ONLY HARD LOCK ──
-       CSS already hides everything in landscape via @media (orientation: landscape).
-       JS layer handles: orientation API lock + killing all game loops so nothing
-       runs in background. We NEVER auto-resume — user must press Play again. */
     function checkOrientation() {
       var isLandscape = window.innerWidth > window.innerHeight;
       if (isLandscape) {
-        lock.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        tryLockPortrait();
-
-        /* ── CRITICAL BUG FIX: Force-hide ALL fixed game panels in landscape.
-           position:fixed panels (tetris-play, rd-play etc.) escape overflow:hidden
-           on parent elements and bleed through the portrait lock overlay.
-           We must explicitly hide them with visibility:hidden + pointer-events:none. ── */
+        /* ── Force-hide fixed game panels so they don't render in landscape ── */
         document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
           p.classList.add('hidden');
           p.style.visibility = 'hidden';
           p.style.pointerEvents = 'none';
         });
-        /* Safety net: also target tetris-play directly by ID */
         var tp = document.getElementById('tetris-play');
         if (tp) { tp.classList.add('hidden'); tp.style.visibility = 'hidden'; tp.style.pointerEvents = 'none'; }
 
-        /* Hard-stop ALL game loops */
+        /* ── Stop all game loops — user must press ▶ START to resume ── */
         window.DZ_PAUSED = true;
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
@@ -4821,37 +4759,23 @@ if (document.readyState === 'loading') {
           });
         }
       } else {
-        /* Portrait — remove overlay */
-        lock.classList.remove('active');
-        document.body.style.overflow = '';
-
-        /* Restore inline styles we added — keep .hidden class intact.
-           Panels stay hidden; user must press ▶ START to play again.
-           Do NOT remove .hidden — that would re-show the game uninvited. */
+        /* ── Portrait: restore inline styles, keep .hidden intact ── */
         document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
           p.style.visibility = '';
           p.style.pointerEvents = '';
         });
         var tp = document.getElementById('tetris-play');
         if (tp) { tp.style.visibility = ''; tp.style.pointerEvents = ''; }
-
-        /* Clear pause flag only — never auto-restart. */
         window.DZ_PAUSED = false;
       }
     }
 
-    /* ── Wire events ── */
     window.addEventListener('orientationchange', function () {
-      /* Small delay so innerWidth/Height reflect the new orientation */
       setTimeout(checkOrientation, 150);
     });
     window.addEventListener('resize', checkOrientation);
-
-    /* Run immediately and after DOM is ready */
     checkOrientation();
     document.addEventListener('DOMContentLoaded', checkOrientation);
-
-    /* Expose so external code can re-check (e.g. after showAH(), showRPS() etc.) */
     window.dzCheckOrientation = checkOrientation;
   })();
   </script>

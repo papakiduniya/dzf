@@ -1132,38 +1132,18 @@
    Pure CSS — no JS class toggle needed. Works even if JS is slow/blocked.
    The #dz-portrait-lock element is always in the DOM; CSS shows/hides it. */
 
-#dz-portrait-lock {
-  display: none;           /* hidden in portrait by default */
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;     /* max z-index — above every canvas/panel */
-  background: #07080f;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  text-align: center;
-  padding: 32px 24px;
-  box-sizing: border-box;
-  pointer-events: all;     /* block all touch/click through to game */
-}
+/* #dz-portrait-lock removed — landscape is now allowed, hub scrolls freely */
 
-/* JS hook — kept for backwards compat but CSS media query is authoritative */
-#dz-portrait-lock.active {
-  display: flex;
-}
-
-/* ── PRIMARY LOCK: pure CSS, fires on any device in landscape ── */
+/* ── Landscape: no overlay, no scroll block. Hub is fully scrollable.
+   Only game panels are hidden (via JS + CSS below). ── */
 @media (orientation: landscape) {
-  #dz-portrait-lock {
-    display: flex !important;  /* show regardless of .active class */
+  /* Hide fixed game panels behind canvases — these are stopped by JS too */
+  #tetris-play,
+  [data-dz-game-panel] {
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
-  html, body {
-    overflow: hidden !important;
-    max-height: 100vh !important;
-    touch-action: none !important; /* block scroll/zoom behind overlay */
-  }
-  /* Freeze all canvas elements so they can't paint behind the lock */
+  /* Freeze active canvases so no game renders behind the hub */
   canvas {
     visibility: hidden !important;
     pointer-events: none !important;

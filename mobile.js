@@ -330,25 +330,25 @@
 
   window.addEventListener('resize', function() { scaleCanvases(); scaleDpad(); });
 
-  /* ── Portrait-only lock: kill all game loops on landscape, never auto-resume ──
-     CSS already blocks rendering via @media (orientation: landscape) { canvas { visibility:hidden } }
-     This JS layer hard-stops every RAF/timer loop so nothing runs in the background. */
+  /* ── Landscape handler: kill game loops, hub remains scrollable ──
+     Landscape is now ALLOWED. Hub page scrolls freely in horizontal view.
+     We only stop game RAF/timer loops so nothing runs in the background.
+     No overlay, no scroll block. CSS hides game canvases via visibility:hidden. */
   window.addEventListener('orientationchange', function () {
     setTimeout(function () {
       scaleCanvases();
       scaleDpad();
       var isLandscape = window.innerWidth > window.innerHeight;
       if (isLandscape) {
-        /* Landscape — kill everything */
+        /* Landscape — pause game loops only, do NOT block scrolling */
         window.DZ_PAUSED = true;
         if (typeof dzSuspendAllAudio === 'function') dzSuspendAllAudio();
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
         }
       } else {
-        /* Back to portrait — clear flag ONLY. Do NOT call dzResumeAllAudio()
-           or restart any game loop. User must press ▶ START to play again.
-           Auto-resuming here was the root cause of Tetris playing randomly. */
+        /* Back to portrait — clear flag ONLY. Do NOT auto-resume.
+           User must press ▶ START to play again. */
         window.DZ_PAUSED = false;
       }
       if (typeof window.dzCheckOrientation === 'function') window.dzCheckOrientation();
