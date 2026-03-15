@@ -277,7 +277,7 @@
       var homeEl = $('sdk-home');
       if (homeEl) { homeEl.classList.add('hidden'); homeEl.style.display = 'none'; }
       var playEl = $('sdk-play');
-      if (playEl) { playEl.classList.remove('hidden'); playEl.style.removeProperty('display'); playEl.scrollTop = 0; }
+      if (playEl) { playEl.classList.remove('hidden'); playEl.style.setProperty('display','flex','important'); playEl.scrollTop = 0; }
       var backBtn = document.getElementById('sdk-back-play'); if (backBtn) backBtn.style.display = 'block';
       initGame();
     }

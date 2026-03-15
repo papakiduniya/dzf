@@ -44,7 +44,7 @@
     var play = el('rd-play');
     if (play) {
       play.classList.add('hidden');
-      play.style.display = 'none';
+      play.style.setProperty('display','none','important');
     }
     var backBtn = el('rd-back-play');
     if (backBtn) backBtn.style.display = 'none';
@@ -107,7 +107,7 @@
     var homeEl = el('rd-home');
     if (homeEl) { homeEl.classList.add('hidden'); homeEl.style.display = 'none'; }
     var playEl = el('rd-play');
-    if (playEl) { playEl.classList.remove('hidden'); playEl.style.removeProperty('display'); playEl.scrollTop = 0; }
+    if (playEl) { playEl.classList.remove('hidden'); playEl.style.setProperty('display','flex','important'); playEl.scrollTop = 0; }
     el('rd-result').classList.add('hidden');
     var backBtn = el('rd-back-play'); if (backBtn) backBtn.style.display = 'block';
 

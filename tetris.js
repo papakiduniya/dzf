@@ -271,7 +271,7 @@
 
     el('tetris-home').classList.add('hidden');
     var playEl = el('tetris-play');
-    if (playEl) { playEl.classList.remove('hidden'); playEl.scrollTop = 0; }
+    if (playEl) { playEl.classList.remove('hidden'); playEl.style.setProperty('display','block','important'); playEl.scrollTop = 0; }
     el('tetris-result').classList.add('hidden');
     var backBtn = el('tetris-back-play'); if (backBtn) backBtn.style.display = 'block';
 

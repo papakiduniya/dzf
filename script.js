@@ -93,15 +93,18 @@ var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, scree
 
 function hideAllScreens() {
   ALL_SCREENS.forEach(function(s){ if(s) s.classList.add('hidden'); });
+  // Also hide fixed-position play panels (they escape parent display:none)
+  // tetris-play, rd-play, sdk-play, carrom-play sit at position:fixed and
+  // must be hidden explicitly when switching games.
   if (typeof window.dzHideAllFixedPanels === 'function') {
     window.dzHideAllFixedPanels();
   } else {
+    // Fallback if dzHideAllFixedPanels not yet defined
     ['tetris-play','rd-play','sdk-play','carrom-play'].forEach(function(id) {
       var el = document.getElementById(id);
-      if (el) { el.classList.add('hidden'); }
+      if (el) { el.classList.add('hidden'); el.style.setProperty('display','none','important'); }
     });
   }
-  document.body.classList.add('dz-in-game');
 }
 
 function showHub() {
@@ -111,7 +114,8 @@ function showHub() {
   // Hide all fixed play panels and back buttons (position:fixed elements escape parent hide)
   ['mine-play','tetris-play','bm-play','rd-play',
    'tw-play','sdk-play','carrom-play','ludo-play'].forEach(function(id) {
-    var el = document.getElementById(id); if (el) el.classList.add('hidden');
+    var el = document.getElementById(id);
+    if (el) { el.classList.add('hidden'); el.style.setProperty('display','none','important'); }
   });
   ['mine-back-play','tetris-back-play','bm-back-play','rd-back-play',
    'tw-back-play','sdk-back-play','carrom-back-play','ludo-back-play'].forEach(function(id) {
@@ -126,7 +130,14 @@ function showHub() {
   var countdown    = document.getElementById('dz-ad-countdown');
   var _doShowHub   = function() {
     if (adOverlay) adOverlay.style.display = 'none';
+    // Hide every screen-* div (querySelectorAll catches ones missing from ALL_SCREENS)
+    document.querySelectorAll('[id^="screen-"]').forEach(function(s){ s.classList.add('hidden'); });
     hideAllScreens();
+    // Remove dz-in-game BEFORE showing hub so CSS :has() selector sees correct state
+    document.body.classList.remove('dz-in-game');
+    // Clear the inline style set by dzShowGameMenuBtn so CSS default (hidden) takes over
+    var igBtn = document.getElementById('dz-ig-menu-btn');
+    if (igBtn) igBtn.style.removeProperty('display');
     screenHub.classList.remove('hidden');
     SoundManager.backToHub();
     if (window.dzHideGameMenuBtn) window.dzHideGameMenuBtn();
@@ -157,6 +168,7 @@ function showTTT() {
   hideAllScreens();
   screenTTT.classList.remove('hidden');
   tttRestart();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
   if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('ttt');
 }
@@ -165,6 +177,7 @@ function showRPS() {
   hideAllScreens();
   screenRPS.classList.remove('hidden');
   rpsRestart();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
   if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('rps');
 }
@@ -173,6 +186,7 @@ function showTap() {
   hideAllScreens();
   screenTap.classList.remove('hidden');
   tapReset();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
   if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('tapbattle');
 }
@@ -181,6 +195,7 @@ function show2048() {
   hideAllScreens();
   screen2048.classList.remove('hidden');
   d2048Init();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
   if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('duel2048');
 }
@@ -188,6 +203,7 @@ function show2048() {
 function showC4() {
   hideAllScreens();
   screenC4.classList.remove('hidden');
+  document.body.classList.add('dz-in-game');
   // Stop any in-progress game before returning to home
   c4GameActive = false;
   if (c4BoardWrap) c4BoardWrap.classList.add('locked');
@@ -202,6 +218,7 @@ function showCricket() {
   hideAllScreens();
   screenCricket.classList.remove('hidden');
   cricResetToSetup();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
   if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('cricket');
 }
@@ -209,6 +226,7 @@ function showCricket() {
 function showAH() {
   hideAllScreens();
   screenAH.classList.remove('hidden');
+  document.body.classList.add('dz-in-game');
   var ahHome = document.getElementById('ah-home');
   var ahPlay = document.getElementById('ah-play-panel');
   if (ahHome) ahHome.classList.remove('hidden');
@@ -228,6 +246,8 @@ function showPB() {
   // Stop any running session
   if (pb && pb.timerInterval) { clearInterval(pb.timerInterval); pb.timerInterval = null; }
   if (pb) { pb.sessionOver = true; }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('passbreach');
   window.scrollTo(0, 0);
 }
 
@@ -239,6 +259,8 @@ function showChess() {
   var play = document.getElementById('chess-play-panel');
   if (home) home.classList.remove('hidden');
   if (play) play.classList.add('hidden');
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('chess');
   window.scrollTo(0, 0);
 }
 
@@ -246,6 +268,8 @@ function showBattleship() {
   hideAllScreens();
   screenBattleship.classList.remove('hidden');
   if (typeof bsInit === 'function') { bsInit(); }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('battleship');
   window.scrollTo(0, 0);
 }
 
@@ -253,6 +277,8 @@ function showCheckers() {
   hideAllScreens();
   screenCheckers.classList.remove('hidden');
   if (typeof ckInit === 'function') { ckInit(); }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('checkers');
   window.scrollTo(0, 0);
 }
 
@@ -260,6 +286,8 @@ function showDarts() {
   hideAllScreens();
   screenDarts.classList.remove('hidden');
   if (typeof dartsInit === 'function') { dartsInit(); }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('darts');
   window.scrollTo(0, 0);
 }
 
@@ -268,6 +296,8 @@ function showTanks() {
   screenTanks.classList.remove('hidden');
   if (typeof tanksDestroy === 'function') { tanksDestroy(); }
   if (typeof tanksInit === 'function') { tanksInit(); }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('tanks');
   window.scrollTo(0, 0);
 }
 
@@ -276,6 +306,8 @@ function showStarCatcher() {
   screenStarCatcher.classList.remove('hidden');
   if (typeof scDestroy === 'function') { scDestroy(); }
   if (typeof scInit === 'function') { scInit(); }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('starcatcher');
   window.scrollTo(0, 0);
 }
 
@@ -287,6 +319,8 @@ function showSpaceDodge() {
   if (sdHome) sdHome.classList.remove('hidden');
   if (sdPlay) sdPlay.classList.add('hidden');
   if (typeof sdStopGame === 'function') sdStopGame();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('spacedodge');
   window.scrollTo(0, 0);
 }
 
@@ -294,6 +328,8 @@ function showPingPong() {
   hideAllScreens();
   screenPingPong.classList.remove('hidden');
   if (typeof ppInit === 'function') ppInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('pingpong');
   window.scrollTo(0, 0);
 }
 
@@ -303,6 +339,8 @@ function showMinesweeper() {
   hideAllScreens();
   if (screenMinesweeper) screenMinesweeper.classList.remove('hidden');
   if (typeof mineInit === 'function') mineInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('minesweeper');
   window.scrollTo(0, 0);
 }
 
@@ -312,6 +350,8 @@ function showTetris() {
   hideAllScreens();
   if (screenTetris) screenTetris.classList.remove('hidden');
   if (typeof tetrisInit === 'function') tetrisInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('tetris');
   window.scrollTo(0, 0);
 }
 
@@ -319,6 +359,8 @@ function showBomberman() {
   hideAllScreens();
   if (screenBomberman) screenBomberman.classList.remove('hidden');
   if (typeof bombermanInit === 'function') bombermanInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('bomberman');
   window.scrollTo(0, 0);
 }
 
@@ -326,6 +368,8 @@ function showDrawGuess() {
   hideAllScreens();
   if (screenDrawGuess) screenDrawGuess.classList.remove('hidden');
   if (typeof drawguessInit === 'function') drawguessInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('drawguess');
   window.scrollTo(0, 0);
 }
 
@@ -334,20 +378,18 @@ function showDrawGuess() {
 function showReaction() {
   hideAllScreens();
   if (screenReaction) screenReaction.classList.remove('hidden');
-  // Force rd-play hidden and rd-home visible before reactionInit runs
-  var rdPlay = document.getElementById('rd-play');
-  var rdHome = document.getElementById('rd-home');
-  if (rdPlay) { rdPlay.classList.add('hidden'); rdPlay.style.display = 'none'; }
-  if (rdHome) { rdHome.classList.remove('hidden'); rdHome.style.removeProperty('display'); rdHome.style.removeProperty('visibility'); }
   if (typeof reactionInit === 'function') reactionInit();
-  window.scrollTo(0, 0);
+  document.body.classList.add('dz-in-game');
   if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('reaction');
+  window.scrollTo(0, 0);
 }
 
 function showTerritory() {
   hideAllScreens();
   if (screenTerritory) screenTerritory.classList.remove('hidden');
   if (typeof territoryInit === 'function') territoryInit();
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('territory');
   window.scrollTo(0, 0);
 }
 
@@ -366,21 +408,24 @@ function showLudo() {
     if (home) home.classList.remove('hidden');
     if (play) play.classList.add('hidden');
   }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('ludo');
   window.scrollTo(0, 0);
 }
 
 function showSudoku() {
   hideAllScreens();
+  document.body.classList.add('dz-in-game');
   var s = document.getElementById('screen-sudoku');
   if (s) {
     s.classList.remove('hidden');
     var home = document.getElementById('sdk-home');
     var play = document.getElementById('sdk-play');
-    if (play) { play.classList.add('hidden'); play.style.display = 'none'; }
-    if (home) { home.classList.remove('hidden'); home.style.removeProperty('display'); home.style.removeProperty('visibility'); }
+    if (home) home.classList.remove('hidden');
+    if (play) play.classList.add('hidden');
   }
-  window.scrollTo(0, 0);
   if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('sudoku');
+  window.scrollTo(0, 0);
 }
 
 function showCarrom() {
@@ -393,6 +438,8 @@ function showCarrom() {
     if (home) home.classList.remove('hidden');
     if (play) play.classList.add('hidden');
   }
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('carrom');
   window.scrollTo(0, 0);
 }
 
@@ -3067,6 +3114,7 @@ function startTTTGame() {
   hidePanel('ttt-home');
   showPanel('ttt-play-panel');
   tttRestart();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
 }
 
@@ -3076,6 +3124,7 @@ showTTT = function() {
   hideAllScreens();
   screenTTT.classList.remove('hidden');
   showTTTHome();
+  document.body.classList.add('dz-in-game');
 };
 
 // TTT home page button wiring
@@ -3127,6 +3176,7 @@ function startRPSGame() {
   hidePanel('rps-home');
   showPanel('rps-play-panel');
   rpsRestart();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
 }
 
@@ -3135,6 +3185,7 @@ showRPS = function() {
   hideAllScreens();
   screenRPS.classList.remove('hidden');
   showRPSHome();
+  document.body.classList.add('dz-in-game');
 };
 
 document.getElementById('rps-home-back').addEventListener('click', showHub);
@@ -3193,6 +3244,7 @@ function startTapGame() {
   hidePanel('tap-home');
   showPanel('tap-play-panel');
   tapReset();
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
 }
 
@@ -3201,6 +3253,7 @@ showTap = function() {
   hideAllScreens();
   screenTap.classList.remove('hidden');
   showTapHome();
+  document.body.classList.add('dz-in-game');
 };
 
 document.getElementById('tap-home-back').addEventListener('click', function(){
@@ -3253,6 +3306,7 @@ function startD2048Game() {
   if (d2048HP_mode !== 'pvp')  document.getElementById('d2048-'+d2048HP_diff).click();
   hidePanel('d2048-home');
   showPanel('d2048-play-panel');
+  document.body.classList.add('dz-in-game');
   window.scrollTo(0, 0);
 }
 
@@ -3261,6 +3315,7 @@ show2048 = function() {
   hideAllScreens();
   screen2048.classList.remove('hidden');
   showD2048Home();
+  document.body.classList.add('dz-in-game');
 };
 
 document.getElementById('d2048-home-back').addEventListener('click', function(){
@@ -3698,6 +3753,7 @@ function startC4Game() {
   c4ResetGame();
   document.getElementById('c4-home').classList.add('hidden');
   document.getElementById('c4-play-panel').classList.remove('hidden');
+  document.body.classList.add('dz-in-game');
 }
 
 document.getElementById('c4-hp-start').addEventListener('click', startC4Game);
@@ -4157,7 +4213,8 @@ function ahGameOver(winner) {
     '<div class="ah-win-title" style="color:' + color + '">' + label + ' WINS!</div>' +
     '<div class="ah-win-score">' + ahP1Score + ' – ' + ahP2Score + '</div>' +
     '<button class="ah-win-btn" onclick="startAHGame()">↺ Play Again</button>' +
-    '<button class="ah-win-btn ah-win-btn--sec" onclick="showAH()">← Menu</button>';
+    '<button class="ah-win-btn ah-win-btn--sec" onclick="showAH()">⚙ Setup</button>' +
+    '<button class="ah-win-btn ah-win-btn--sec" onclick="window.dzNavShowHome&&window.dzNavShowHome()">⬅ Hub</button>';
 }
 
 function ahUpdateScoreUI() {
@@ -4708,11 +4765,12 @@ function startAHGame() {
   document.getElementById('ah-pause-btn').textContent = '⏸';
   ahInit();
   ahRunning = true;
-  ahLastTime = 0; // safe 16ms default on first frame
+  ahLastTime = 0;
   ahRAF = requestAnimationFrame(ahLoop);
   ahUpdatePips('ah-p1-pips', 0, ahWinScore, '#00e5ff');
   ahUpdatePips('ah-p2-pips', 0, ahWinScore, '#ff4081');
   SoundManager.ahPuckStart();
+  document.body.classList.add('dz-in-game');
 }
 
 
@@ -5234,6 +5292,8 @@ function showMFD() {
   if (play) play.classList.add('hidden');
   // Stop any in-progress bot timer
   mfdState.botTimeout && clearTimeout(mfdState.botTimeout);
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('memoryflip');
   window.scrollTo(0, 0);
 }
 
@@ -5249,6 +5309,8 @@ function showCDD() {
   var play = document.getElementById('cdd-play');
   if (home) home.classList.remove('hidden');
   if (play) play.classList.add('hidden');
+  document.body.classList.add('dz-in-game');
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('connectdots');
   window.scrollTo(0, 0);
 }
 
@@ -5819,7 +5881,6 @@ function mfdInit(mode, diff) {
     if (play) play.classList.add('hidden');
     if (home) home.classList.remove('hidden');
     SoundManager.backToHub();
-    document.body.classList.remove('dz-in-game');
     window.scrollTo(0, 0);
   });
 
@@ -5904,6 +5965,7 @@ var GameLoader = (function() {
     hideAllScreens();
     var el = document.getElementById(containerId);
     if (el) { el.classList.remove('hidden'); }
+    document.body.classList.add('dz-in-game');
     window.scrollTo(0, 0);
     // Show game menu button directly — reliable vs event timing issues
     if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn(containerId.replace('screen-',''));
@@ -7791,7 +7853,14 @@ var _dzMenuOpen = false;
 // ═══════════════════════════════════════════════════════════
 
 function dzPauseAllGames() {
-  // No AudioContext suspend — causes glitch pop on resume. DZ_PAUSED flag stops loops.
+  // ── 1. SILENCE ALL AUDIO IMMEDIATELY ──────────────────────────
+  // Suspends every AudioContext in the page — covers SoundManager,
+  // ahAudio, pbAudio, and any context from external .js files.
+  dzSuspendAllAudio();
+
+  // ── 2. SET GLOBAL PAUSE FLAG ──────────────────────────────────
+  // External game RAF loops (tetris.js, reaction.js, etc.) should
+  // guard their loops with: if (window.DZ_PAUSED) return;
   window.DZ_PAUSED = true;
 
   // ── 3. PAUSE INTERNAL GAMES (defined in this file) ────────────
@@ -7920,11 +7989,14 @@ function dzGoHome() {
   dzCloseMenu();
   dzClosePanels();
   dzCloseAllLegal();
+  // Remove dz-in-game FIRST so CSS :has() sees correct state
+  document.body.classList.remove('dz-in-game');
+  // Clear game menu btn inline style so it hides on hub
+  var igBtn = document.getElementById('dz-ig-menu-btn');
+  if (igBtn) igBtn.style.removeProperty('display');
   // If a game screen is active, navigate back to hub
   var hub = document.getElementById('screen-hub');
   if (hub && hub.classList.contains('hidden')) {
-    // Find and click the back button of whatever game is showing,
-    // or directly show hub + hide all game screens
     document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
       s.classList.add('hidden');
     });
@@ -7954,7 +8026,7 @@ function dzNavShowHome() {
   ['mine-play','tetris-play','bm-play','rd-play',
    'tw-play','sdk-play','carrom-play','ludo-play'].forEach(function(id) {
     var el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
+    if (el) { el.classList.add('hidden'); el.style.setProperty('display','none','important'); }
   });
 
   // ── Hide all floating back buttons ──
@@ -7967,6 +8039,12 @@ function dzNavShowHome() {
   // ── Restore body scroll ──
   document.body.style.overflow = '';
   document.body.style.overscrollBehavior = '';
+
+  // ── Remove dz-in-game FIRST so CSS :has() selector sees correct state ──
+  document.body.classList.remove('dz-in-game');
+  // Clear inline style set by dzShowGameMenuBtn
+  var igBtn = document.getElementById('dz-ig-menu-btn');
+  if (igBtn) igBtn.style.removeProperty('display');
 
   // ── Show hub ──
   document.querySelectorAll('[id^="screen-"]').forEach(function(s) {

@@ -289,8 +289,8 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
   } else {
     // ── P2 (top) → always sends ball DOWN toward P1's goal ──
     ahPuck.vy = +spd;
-    if (relX < 0) ahPuck.vx = -spd;           // left  half → angled left
-    else          ahPuck.vx = +med;           // right half → angled right
+    if (relX < 0) ahPuck.vx = -med;  // left  half → angled left  (was -spd, caused forced 45°)
+    else          ahPuck.vx = +med;  // right half → angled right
   }
 
   // FIX 1 — FIXED SPEED: normalize the velocity vector to exactly ahGetSpeed()
@@ -308,6 +308,7 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
   // primary cause of corner lock-in — the puck bounces between two parallel walls
   // indefinitely without ever reaching a paddle.
   var MIN_RATIO = Math.sin(12 * Math.PI / 180); // ≈ 0.208
+  // Re-read after FIX1's normalization so we test the actual post-normalize values.
   var absVx = Math.abs(ahPuck.vx), absVy = Math.abs(ahPuck.vy);
   if (absVx < spd * MIN_RATIO) {
     // vx too small — nudge it away from zero, preserving the hit direction
@@ -379,10 +380,22 @@ function ahSpawnWallSparks(x, y) {
   }
 }
 
-// ── Physics step ───────────────────────────────────────────────
-// Replaces the complex multi-sub-step engine with the simpler
-// air.js-derived approach: move → wall bounce → paddle collide → goal check.
+// ── Physics step with sub-stepping to prevent high-speed tunneling ────────
+// At max speed (ahInc=20, W=360) the puck moves ~630 px/s.  In a 50 ms frame
+// that is ≈31 px — equal to the paddle radius, so the puck can skip through
+// the paddle entirely in one step.  Sub-stepping to ≤10 ms keeps the overlap
+// test reliable at every speed.
 function ahPhysicsStep(dt) {
+  var MAX_SUB_MS = 10;
+  var steps = Math.max(1, Math.ceil(dt / MAX_SUB_MS));
+  var subDt  = dt / steps;
+  for (var s = 0; s < steps; s++) {
+    if (ahPhysicsSubStep(subDt)) return true;
+  }
+  return false;
+}
+
+function ahPhysicsSubStep(dt) {
   var sec = dt/1000, r = ahPuck.r, gw = ahGoalWidth()/2, cx = ahW/2;
 
   ahPuck.x += ahPuck.vx * sec;
@@ -460,9 +473,12 @@ function ahPhysicsStep(dt) {
   }
 
   // ── Paddle collisions → air.js angle assignment ──
+  // break after first hit: processing both paddles in the same frame
+  // (e.g. during serve) caused the second call to override the first.
   for (var pi = 0; pi < 2; pi++) {
     if (ahCircleCollide(ahPaddles[pi], ahPuck)) {
       ahAssignPuckAngle(ahPaddles[pi], pi);
+      break;
     }
   }
 
@@ -598,8 +614,11 @@ function ahLoop(ts) {
   // reaches either paddle because it won't cross the centre line).
   var puckSpd = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
   var nearZero = puckSpd < 40 * (ahW/400);
-  var crossingCentre = (ahPuck.vy < 0 && ahPuck.y < ahH*0.5) ||
-                       (ahPuck.vy > 0 && ahPuck.y > ahH*0.5);
+  // crossingCentre = puck is heading TOWARD the opponent's half (making progress).
+  // vy < 0 (going UP)   + y > H/2 (bottom half) → travelling toward P2's goal. ✓
+  // vy > 0 (going DOWN) + y < H/2 (top half)    → travelling toward P1's goal. ✓
+  var crossingCentre = (ahPuck.vy < 0 && ahPuck.y > ahH*0.5) ||
+                       (ahPuck.vy > 0 && ahPuck.y < ahH*0.5);
 
   if (nearZero || !crossingCentre) {
     ahStuckTimer += dt;

@@ -13301,14 +13301,15 @@ canvas {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
+/* In a game: show ☰ game btn, hide hub hamburger */
+body.dz-in-game #dz-ig-menu-btn {
+  display: flex !important;
+}
 body.dz-in-game #dz-hamburger,
 body.dz-in-game .hamburger-btn {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
-}
-body.dz-in-game #dz-ig-menu-btn {
-  display: flex !important;
 }
 
 /* Dropdown opens from top-right */
@@ -15685,7 +15686,7 @@ body.dz-game-landscape-required #dz-portrait-warn {
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
   cursor: pointer !important;
-  display: none !important;
+  display: none !important;           /* shown only in games via body.dz-in-game */
   align-items: center !important;
   justify-content: center !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.55) !important;
@@ -16955,11 +16956,12 @@ body::-webkit-scrollbar,
     visibility: hidden !important;
   }
 
-  /* Fixed play panels in landscape — only hide when they have .hidden class */
-  html #tetris-play.hidden,
-  html #rd-play.hidden,
-  html #carrom-play.hidden,
-  html #sdk-play.hidden {
+  /* Hide fixed play panels ONLY when their parent screen is hidden.
+     Previously this was unconditional (hiding them always in landscape = blank screen bug). */
+  html #screen-tetris.hidden  #tetris-play,
+  html #screen-reaction.hidden #rd-play,
+  html #screen-carrom.hidden  #carrom-play,
+  html #screen-sudoku.hidden  #sdk-play {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;
