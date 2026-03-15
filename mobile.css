@@ -1200,3 +1200,60 @@
   line-height: 1.6;
   max-width: 280px;
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   § 11  TETRIS PORTRAIT LAYOUT FIX + LANDSCAPE HARD HIDE
+         BUG FIX: tetris-play used inline flex-wrap row which
+         caused side-by-side layout visible in landscape screenshots.
+         Also: position:fixed panels escape overflow:hidden, so we
+         must explicitly hide them in landscape via CSS too.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Tetris: force vertical column for the players wrapper ── */
+@media (max-width: 768px) and (orientation: portrait) {
+
+  /* Override the inline style "display:flex; flex-wrap:wrap; justify-content:center"
+     on #tetris-players-wrap to stack players vertically */
+  #tetris-players-wrap {
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+    gap: 20px !important;
+    flex-wrap: nowrap !important;
+  }
+
+  /* Each player panel fills container */
+  #tetris-players-wrap > div {
+    width: 100% !important;
+    max-width: 280px !important;
+    margin: 0 auto !important;
+  }
+
+  /* Tetris canvases: full-width, proportional height */
+  #tetris-canvas-p1,
+  #tetris-canvas-p2 {
+    width: 100% !important;
+    max-width: 280px !important;
+    height: auto !important;
+    display: block !important;
+  }
+}
+
+/* ── CRITICAL: In landscape, force-hide tetris-play and all fixed game panels ──
+   position:fixed elements escape overflow:hidden on parents, so they bleed
+   through the portrait lock overlay. Explicitly hide them with visibility. */
+@media (orientation: landscape) {
+
+  /* Hide tetris-play specifically — this is the panel seen in the screenshot */
+  #tetris-play {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* Hide ALL fixed-position game panels using the data attribute we added */
+  [data-dz-game-panel] {
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}

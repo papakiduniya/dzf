@@ -3557,7 +3557,7 @@
     <!-- Tetris back-play: hidden dummy kept for JS/script.js compat -->
     <button id="tetris-back-play" style="display:none;" aria-hidden="true"></button>
 
-    <div id="tetris-play" class="hidden" style="position:fixed;inset:0;background:#07080f;overflow-y:auto;padding:0 12px 16px;font-family:'Rajdhani',sans-serif;box-sizing:border-box;z-index:50;">
+    <div id="tetris-play" class="hidden" data-dz-game-panel="tetris" style="position:fixed;inset:0;background:#07080f;overflow-y:auto;padding:0 12px 16px;font-family:'Rajdhani',sans-serif;box-sizing:border-box;z-index:50;">
       <div class="dz-topbar" style="display:none!important" aria-hidden="true">
         <button class="ghp-back-hub" onclick="window.dzNavShowHome&&window.dzNavShowHome()">← Hub</button>
         <button class="ghp-back-game" onclick="document.getElementById('tetris-play').classList.add('hidden');document.getElementById('tetris-home').style.display='';if(window.tetrisStop)window.tetrisStop();">⚙ Setup</button>
@@ -3568,7 +3568,7 @@
         <h1 style="margin:0;font-family:'Orbitron',sans-serif;font-size:1.15rem;font-weight:900;letter-spacing:0.13em;background:linear-gradient(90deg,#00e5ff,#0088ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:inline-block;">🧱 TETRIS DUEL</h1>
       </div>
 
-      <div style="display:flex;gap:16px;justify-content:center;align-items:flex-start;flex-wrap:wrap;">
+      <div id="tetris-players-wrap" style="display:flex;gap:16px;justify-content:center;align-items:flex-start;flex-wrap:wrap;">
         <!-- P1 -->
         <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
           <div style="color:#00e5ff;font-weight:700;letter-spacing:0.1em;">🔵 PLAYER 1</div>
@@ -3652,7 +3652,7 @@
     <!-- Reaction back-play: hidden dummy kept for JS/script.js compat -->
     <button id="rd-back-play" style="display:none;" aria-hidden="true"></button>
 
-    <div id="rd-play" class="hidden" style="position:fixed;inset:0;background:#07080f;overflow-y:auto;padding:0 16px 16px;font-family:'Rajdhani',sans-serif;display:flex;flex-direction:column;align-items:center;box-sizing:border-box;z-index:50;">
+    <div id="rd-play" class="hidden" data-dz-game-panel="reaction" style="position:fixed;inset:0;background:#07080f;overflow-y:auto;padding:0 16px 16px;font-family:'Rajdhani',sans-serif;display:flex;flex-direction:column;align-items:center;box-sizing:border-box;z-index:50;">
       <div class="dz-topbar" style="width:100%;align-self:stretch;" style="display:none!important" aria-hidden="true">
         <button class="ghp-back-hub" onclick="window.dzNavShowHome&&window.dzNavShowHome()">← Hub</button>
         <button class="ghp-back-game" onclick="document.getElementById('rd-play').classList.add('hidden');document.getElementById('rd-home').style.display='';if(window.reactionStop)window.reactionStop();if(window.rdStop)window.rdStop();">⚙ Setup</button>
@@ -3942,7 +3942,7 @@
     <!-- carrom-back-play: hidden dummy kept for JS/script.js compat -->
     <button id="carrom-back-play" style="display:none;" aria-hidden="true"></button>
 
-    <div id="carrom-play" class="hidden" style="position:fixed;inset:0;background:#07080f;display:flex;flex-direction:column;align-items:center;overflow:hidden;box-sizing:border-box;z-index:50;">
+    <div id="carrom-play" class="hidden" data-dz-game-panel="carrom" style="position:fixed;inset:0;background:#07080f;display:flex;flex-direction:column;align-items:center;overflow:hidden;box-sizing:border-box;z-index:50;">
       <div class="dz-topbar" style="width:100%;align-self:stretch;" style="display:none!important" aria-hidden="true">
         <button class="ghp-back-hub" onclick="window.dzNavShowHome&&window.dzNavShowHome()">← Hub</button>
         <button class="ghp-back-game" onclick="document.getElementById('carrom-play').classList.add('hidden');document.getElementById('carrom-home').style.display='';if(window.carromStop)window.carromStop();">⚙ Setup</button>
@@ -4041,7 +4041,7 @@
     <button id="sdk-back-play" style="display:none;" aria-hidden="true"></button>
 
     <!-- Play Panel -->
-    <div id="sdk-play" class="hidden" style="position:fixed;inset:0;background:#07080f;display:flex;flex-direction:column;align-items:center;overflow-y:auto;box-sizing:border-box;z-index:50;">
+    <div id="sdk-play" class="hidden" data-dz-game-panel="sudoku" style="position:fixed;inset:0;background:#07080f;display:flex;flex-direction:column;align-items:center;overflow-y:auto;box-sizing:border-box;z-index:50;">
       <div class="dz-topbar" style="display:none!important" aria-hidden="true">
         <button class="ghp-back-hub" onclick="window.dzNavShowHome&&window.dzNavShowHome()">← Hub</button>
         <button class="ghp-back-game" onclick="document.getElementById('sdk-play').classList.add('hidden');document.getElementById('sdk-home').style.display='';if(window.sudokuStop)window.sudokuStop();">⚙ Setup</button>
@@ -4791,18 +4791,28 @@ if (document.readyState === 'loading') {
     function checkOrientation() {
       var isLandscape = window.innerWidth > window.innerHeight;
       if (isLandscape) {
-        /* Show overlay (redundant with CSS but ensures .active is set for any
-           JS code that checks classList) */
         lock.classList.add('active');
         document.body.style.overflow = 'hidden';
-        /* Try OS-level lock */
         tryLockPortrait();
-        /* Hard-stop ALL game loops — tetris, reaction, carrom, etc. */
+
+        /* ── CRITICAL BUG FIX: Force-hide ALL fixed game panels in landscape.
+           position:fixed panels (tetris-play, rd-play etc.) escape overflow:hidden
+           on parent elements and bleed through the portrait lock overlay.
+           We must explicitly hide them with visibility:hidden + pointer-events:none. ── */
+        document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
+          p.classList.add('hidden');
+          p.style.visibility = 'hidden';
+          p.style.pointerEvents = 'none';
+        });
+        /* Safety net: also target tetris-play directly by ID */
+        var tp = document.getElementById('tetris-play');
+        if (tp) { tp.classList.add('hidden'); tp.style.visibility = 'hidden'; tp.style.pointerEvents = 'none'; }
+
+        /* Hard-stop ALL game loops */
         window.DZ_PAUSED = true;
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
         } else {
-          /* Fallback — stop known external game functions */
           var fns = ['tetrisStop','tetrisDestroy','rdStop','reactionStop',
                      'reactionDestroy','carromStop','sudokuStop','ppStopGame',
                      'sdStopGame','bombermanDestroy','territoryDestroy'];
@@ -4814,9 +4824,18 @@ if (document.readyState === 'loading') {
         /* Portrait — remove overlay */
         lock.classList.remove('active');
         document.body.style.overflow = '';
-        /* Clear pause flag — but do NOT auto-restart any game.
-           Games stay stopped; user must press ▶ START again.
-           This is what prevented Tetris randomly auto-playing. */
+
+        /* Restore inline styles we added — keep .hidden class intact.
+           Panels stay hidden; user must press ▶ START to play again.
+           Do NOT remove .hidden — that would re-show the game uninvited. */
+        document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
+          p.style.visibility = '';
+          p.style.pointerEvents = '';
+        });
+        var tp = document.getElementById('tetris-play');
+        if (tp) { tp.style.visibility = ''; tp.style.pointerEvents = ''; }
+
+        /* Clear pause flag only — never auto-restart. */
         window.DZ_PAUSED = false;
       }
     }
