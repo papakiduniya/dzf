@@ -113,10 +113,13 @@
   function tbKeyDown(e) {
     if (TB.over) return;
     if (!el('tetris-play') || el('tetris-play').classList.contains('hidden')) return;
+    // FIX BUG-2: guard must come BEFORE fn() is called. Previously the check ran
+    // after fn() had already executed, so P2 keys (a/d/s/w/q) still moved the bot's
+    // piece — the return statement at the end was unreachable dead code.
+    var isP2Key = (e.key === 'a' || e.key === 'd' || e.key === 's' || e.key === 'w' || e.key === 'q');
+    if (TB.mode === 'bot' && isP2Key) return;
     var fn = KEY_MAP[e.key];
     if (fn) { e.preventDefault(); fn(); }
-    // P2 keys only if PvP
-    if (TB.mode === 'bot' && (e.key === 'a' || e.key === 'd' || e.key === 's' || e.key === 'w' || e.key === 'q')) return;
   }
 
   function tbStop() {
@@ -190,13 +193,17 @@
     if (cleared > 0) {
       p.lines += cleared;
       p.score += [0, 100, 300, 500, 800][cleared] * p.level;
+      var prevLevel = p.level;
       p.level = Math.floor(p.lines / 10) + 1;
-      // Send garbage to opponent
+      // FIX BUG-3 (part 3/3): rebuild drop interval when level increases
+      if (p.level > prevLevel) tbRebuildInterval(pid);
+      // FIX BUG-1: removed immediate tbAddGarbage() call here. Garbage was applied
+      // to the board instantly AND stored in opp.garbage, so every line clear caused
+      // tbAddGarbage to fire twice — once immediately, once when opponent locked.
+      // Now garbage is only queued; it is applied in the pending-garbage block below.
       var garbage = cleared > 1 ? cleared - 1 : 0;
       if (garbage > 0) {
-        var opp = TB.players[1 - pid];
-        opp.garbage += garbage;
-        tbAddGarbage(1 - pid, garbage);
+        TB.players[1 - pid].garbage += garbage;
       }
     }
 
@@ -260,7 +267,28 @@
     if (!p.piece || p.lost || TB.over) return;
     while (!collides(p.board, p.piece, 0, 1)) { p.piece.y++; p.score += 2; }
     lock(pid);
-    if (p.lost) tbEndGame(1 - pid);
+    if (p.lost) {
+      // FIX BUG-4: mirror the simultaneous-loss draw check from tbMove.
+      // Garbage sent by this hard drop could have topped out the opponent in the
+      // same lock() call. Without this check, that edge case incorrectly awards
+      // the win to the player who actually lost at the same moment.
+      if (TB.players[0].lost && TB.players[1].lost) { tbEndGame(-1); return; }
+      tbEndGame(1 - pid);
+    }
+  }
+
+  // FIX BUG-3 (part 2/2): helper that (re)creates the drop interval for one player
+  // at the speed matching their current level. Called at game-start and whenever
+  // the player's level increases inside lock(). Without this, drop speed was fixed
+  // at the level-1 rate (800 ms) for the entire game.
+  function tbRebuildInterval(pid) {
+    var p = TB.players[pid];
+    if (p.interval) { clearInterval(p.interval); p.interval = null; }
+    var delay = Math.max(100, 800 - (p.level - 1) * 70);
+    p.interval = setInterval(function () {
+      if (TB.over || p.lost) return;
+      tbMove(pid, 0, 1);
+    }, delay);
   }
 
   // ── Start game ────────────────────────────────────────────────
@@ -306,13 +334,12 @@
     var p2ctrl = el('tetris-p2-keys');
     if (p2ctrl) p2ctrl.style.display = TB.mode === 'bot' ? 'none' : '';
 
-    // Game loops
+    // Game loops — one interval per player.
+    // FIX BUG-3 (part 1/2): store player index on the player object so lock() can
+    // rebuild the interval when the level changes (see tbRebuildInterval below).
     TB.players.forEach(function (p, i) {
-      var delay = Math.max(100, 800 - (p.level - 1) * 70);
-      p.interval = setInterval(function () {
-        if (TB.over || p.lost) return;
-        tbMove(i, 0, 1);
-      }, delay);
+      p._idx = i;
+      tbRebuildInterval(i);
     });
 
     if (TB.mode === 'bot') tbBotLoop();

@@ -226,7 +226,11 @@
      Navigation wiring
   ══════════════════════════════════════════════════════════ */
 
-  function showAllScreensExcept(keepId) {
+  // FIX BUG-A: Renamed from showAllScreensExcept → hideAllScreensExcept.
+  // toggle('hidden', el.id !== keepId) ADDS hidden to everything except keepId
+  // and REMOVES it from keepId — i.e. it shows ONLY keepId, hides the rest.
+  // The old name said the exact opposite, which is a maintenance landmine.
+  function hideAllScreensExcept(keepId) {
     document.querySelectorAll('[id^="screen-"]').forEach(el => {
       el.classList.toggle('hidden', el.id !== keepId);
     });
@@ -236,7 +240,7 @@
   document.addEventListener('click', e => {
     if (e.target.closest('.arena-card[data-screen="sudoku"]')) {
       if(typeof window.showSudoku==='function') window.showSudoku();
-      else showAllScreensExcept('screen-sudoku');
+      else hideAllScreensExcept('screen-sudoku');
     }
   });
 
@@ -244,7 +248,7 @@
   document.addEventListener('click', e => {
     if (e.target.id === 'sdk-back-hub') {
       stopTimer();
-      if(typeof window.showHub==='function') window.showHub(); else showAllScreensExcept('screen-hub');
+      if(typeof window.showHub==='function') window.showHub(); else hideAllScreensExcept('screen-hub');
     }
   });
 
@@ -297,10 +301,14 @@
       stopTimer();
       window.scrollTo(0, 0);
       var backBtn = document.getElementById('sdk-back-play'); if (backBtn) backBtn.style.display = 'none';
-      $('sdk-result').classList.add('hidden');
-      $('sdk-play').classList.add('hidden');
-      $('sdk-home').classList.remove('hidden');
-      if(typeof window.showHub==='function') window.showHub(); else showAllScreensExcept('screen-hub');
+      // FIX BUG-B: guard every $() call — getElementById returns null if the element
+      // is missing, and calling .classList on null throws a TypeError that crashes
+      // hub navigation, leaving the user stuck on the result screen.
+      const _res=$('sdk-result'), _play=$('sdk-play'), _home=$('sdk-home');
+      if(_res)  _res.classList.add('hidden');
+      if(_play) _play.classList.add('hidden');
+      if(_home) _home.classList.remove('hidden');
+      if(typeof window.showHub==='function') window.showHub(); else hideAllScreensExcept('screen-hub');
     }
   });
 

@@ -115,8 +115,8 @@ var ahLastTime = 0;
 
 var ahPuck = { x:0, y:0, vx:0, vy:0, r:0, vServe:null };
 var ahPaddles = [
-  { x:0, y:0, r:0, pvx:0, pvy:0, key:{up:false,dn:false,lt:false,rt:false} },
-  { x:0, y:0, r:0, pvx:0, pvy:0, key:{up:false,dn:false,lt:false,rt:false} }
+  { x:0, y:0, r:0, pvx:0, pvy:0, hitMs:0, key:{up:false,dn:false,lt:false,rt:false} },
+  { x:0, y:0, r:0, pvx:0, pvy:0, hitMs:0, key:{up:false,dn:false,lt:false,rt:false} }
 ];
 
 // air.js-derived state
@@ -236,10 +236,12 @@ function ahInit() {
 //                 pallino=1 → P2 (top) serves downward
 function ahResetPositions(serveWho) {
   ahPuck.x = ahW/2; ahPuck.y = ahH/2; ahPuck.vx = 0; ahPuck.vy = 0;
-  ahPaddles[0].x = ahW/2; ahPaddles[0].y = ahH*0.82; ahPaddles[0].pvx=0; ahPaddles[0].pvy=0;
-  ahPaddles[1].x = ahW/2; ahPaddles[1].y = ahH*0.18; ahPaddles[1].pvx=0; ahPaddles[1].pvy=0;
+  ahPaddles[0].x = ahW/2; ahPaddles[0].y = ahH*0.82; ahPaddles[0].pvx=0; ahPaddles[0].pvy=0; ahPaddles[0].hitMs=0;
+  ahPaddles[1].x = ahW/2; ahPaddles[1].y = ahH*0.18; ahPaddles[1].pvx=0; ahPaddles[1].pvy=0; ahPaddles[1].hitMs=0;
   ahServeWho = serveWho;
   ahGoalFreezeMs = 1300;
+  ahStuckTimer = 0;          // prevent rescue nudge firing immediately after a goal
+  ahLastWallSoundMs = 0;     // reset sound debounce so first bounce after serve sounds
   ahTrail=[]; ahSpeedLines=[];
   // air.js: if pallino==0 → ball goes toward P2 (UP in top-down)
   //         if pallino==1 → ball goes toward P1 (DOWN in top-down)
@@ -279,7 +281,13 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
   if (d < 0.01) { dx = 0; dy = (paddleIdx === 0 ? -1 : 1); d = 1; }
   var nx = dx/d, ny = dy/d;
   var overlap = (paddle.r + ahPuck.r + 2) - d;
-  if (overlap > 0) { ahPuck.x += nx*overlap; ahPuck.y += ny*overlap; }
+  if (overlap > 0) {
+    ahPuck.x += nx*overlap;
+    ahPuck.y += ny*overlap;
+    // Re-clamp against walls: the push may have moved the puck past the boundary
+    ahPuck.x = Math.max(ahPuck.r, Math.min(ahW - ahPuck.r, ahPuck.x));
+    ahPuck.y = Math.max(ahPuck.r, Math.min(ahH - ahPuck.r, ahPuck.y));
+  }
 
   var spd = ahGetSpeed();
 
@@ -308,6 +316,7 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
   }
 
   ahAumenta();
+  paddle.hitMs = performance.now(); // start 80ms cooldown — blocks rapid re-collision
   ahSpawnImpact(ahPuck.x, ahPuck.y);
   ahRings.push({x:ahPuck.x, y:ahPuck.y, r:paddle.r, life:1});
   ahSnd.paddleHit(spd / 60);
@@ -316,12 +325,16 @@ function ahAssignPuckAngle(paddle, paddleIdx) {
 // ── Bot puck prediction ────────────────────────────────────────
 // Returns the X position where the puck will arrive at targetY,
 // accounting for left/right wall bounces.
-function ahPredictPuckX(targetY) {
-  if (ahPuck.vy >= 0) return ahW / 2; // puck not heading toward bot
+// movingToward: pass -1 if target is at top (puck must have vy<0 to reach it),
+//               pass +1 if target is at bottom (puck must have vy>0 to reach it).
+function ahPredictPuckX(targetY, movingToward) {
+  // Only predict when puck is actually heading toward the target
+  if (movingToward < 0 && ahPuck.vy >= 0) return ahW / 2;
+  if (movingToward > 0 && ahPuck.vy <= 0) return ahW / 2;
   var py = ahPuck.y, px = ahPuck.x;
   var vy = ahPuck.vy, vx = ahPuck.vx;
-  var dy = py - targetY;
-  if (dy <= 0) return px; // already past the bot's row
+  var dy = Math.abs(py - targetY);
+  if (dy <= 0) return px;
   var t = dy / Math.abs(vy);
   var predX = px + vx * t;
   // Fold predicted X to account for wall bounces
@@ -367,7 +380,7 @@ function ahMoveBot(dt) {
     targetX = ahPuck.x;
   } else {
     // Hard: predict where the puck crosses the bot's front edge
-    targetX = ahPredictPuckX(bot.y + bot.r);
+    targetX = ahPredictPuckX(bot.y + bot.r, -1);
   }
 
   targetX = Math.max(bot.r, Math.min(ahW - bot.r, targetX));
@@ -463,33 +476,41 @@ function ahPhysicsSubStep(dt) {
     // prevents AudioContext overload when sub-stepping fires multiple bounces.
     var _bNow = performance.now();
     if (_bNow - ahLastWallSoundMs > 80) { ahLastWallSoundMs = _bNow; ahSnd.wallBounce(); }
+  }
 
-    // Corner escape: if puck is wedged in a corner, inject a minimum angle
-    // so it doesn't oscillate between two walls indefinitely.
+  // ── Paddle collisions ──────────────────────────────────────────
+  // Per-paddle 80ms cooldown stops rapid re-collision (chasing paddle
+  // catches the puck again in the next sub-step and rewrites velocity).
+  // break after first hit stops both paddles firing the same sub-step.
+  var hitThisStep = false;
+  var _hitNow = performance.now();
+  for (var pi = 0; pi < 2; pi++) {
+    if (_hitNow - ahPaddles[pi].hitMs < 80) continue;
+    if (ahCircleCollide(ahPaddles[pi], ahPuck)) {
+      ahAssignPuckAngle(ahPaddles[pi], pi);
+      hitThisStep = true;
+      break;
+    }
+  }
+
+  // Corner escape — skipped when a paddle hit just fired this sub-step.
+  // Corner escape is position-based, so without this guard it would
+  // immediately overwrite the paddle's assigned velocity while the puck
+  // is still physically inside the corner zone.
+  if (!hitThisStep) {
     var MIN_CORNER = Math.sin(18 * Math.PI / 180);
     var inLeftWall  = ahPuck.x - r <= r * 1.5;
     var inRightWall = ahPuck.x + r >= ahW - r * 1.5;
     var inTopWall   = ahPuck.y - r <= r * 1.5;
     var inBotWall   = ahPuck.y + r >= ahH - r * 1.5;
-
     if ((inLeftWall || inRightWall) && (inTopWall || inBotWall)) {
-      var curSpd = ahGetSpeed();
+      var curSpd = Math.max(ahGetSpeed(), ahW * 0.5);
       if (Math.abs(ahPuck.vx) < curSpd * MIN_CORNER)
         ahPuck.vx = curSpd * MIN_CORNER * (inRightWall ? -1 : 1);
       if (Math.abs(ahPuck.vy) < curSpd * MIN_CORNER)
-        ahPuck.vy = curSpd * MIN_CORNER * (inBotWall  ? -1 : 1);
+        ahPuck.vy = curSpd * MIN_CORNER * (inBotWall ? -1 : 1);
       var cm = Math.sqrt(ahPuck.vx*ahPuck.vx + ahPuck.vy*ahPuck.vy);
       if (cm > 0.01) { ahPuck.vx = ahPuck.vx/cm*curSpd; ahPuck.vy = ahPuck.vy/cm*curSpd; }
-    }
-  }
-
-  // ── Paddle collisions → air.js angle assignment ──
-  // break after first hit: processing both paddles in the same frame
-  // (e.g. during serve) caused the second call to override the first.
-  for (var pi = 0; pi < 2; pi++) {
-    if (ahCircleCollide(ahPaddles[pi], ahPuck)) {
-      ahAssignPuckAngle(ahPaddles[pi], pi);
-      break;
     }
   }
 
@@ -924,14 +945,6 @@ function ahDraw() {
 var ahHPMode='pvb', ahHPDiff='easy', ahHPWinScore=7;
 (function(){
   function q(id){ return document.getElementById(id); }
-  // Clone-replace a button: strips ALL existing listeners (from script.js and any
-  // previous airhockey.js load), then returns the fresh element ready to wire.
-  function freshBtn(id) {
-    var el = q(id); if (!el) return null;
-    var clone = el.cloneNode(true);
-    el.parentNode.replaceChild(clone, el);
-    return clone;
-  }
   ['ah-mode-pvb','ah-mode-pvp'].forEach(function(id){
     var el=q(id); if (!el) return;
     el.addEventListener('click',function(){
@@ -958,46 +971,55 @@ var ahHPMode='pvb', ahHPDiff='easy', ahHPWinScore=7;
       el.classList.add('active'); ahSnd.click();
     });
   });
+  // freshBtn: clone-replaces an element, stripping ALL existing listeners
+  // (including ones script.js added at parse time) so exactly ONE handler fires.
+  function freshBtn(id) {
+    var el = q(id); if (!el) return null;
+    var clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    return clone;
+  }
   var mb = freshBtn('ah-main-back');
-  if (mb) mb.addEventListener('click',function(){ if(typeof showHub==='function') showHub(); });
+  if (mb) mb.addEventListener('click', function(){ if(typeof showHub==='function') showHub(); });
   var bb = freshBtn('ah-back-to-home');
-  if (bb) bb.addEventListener('click',function(){ if(typeof showAH==='function') showAH(); });
+  if (bb) bb.addEventListener('click', function(){ if(typeof showAH==='function') showAH(); });
   var sb = freshBtn('ah-hp-start');
   if (sb) sb.addEventListener('click', startAHGame);
   var pb = freshBtn('ah-pause-btn');
-  if (pb) pb.addEventListener('click',function(){
+  if (pb) pb.addEventListener('click', function(){
     ahPaused=!ahPaused; this.textContent=ahPaused?'▶':'⏸'; ahSnd.click();
   });
 })();
 
 function startAHGame() {
-  // Stop any running loop first — prevents orphaned RAF handles on rapid restart
+  // 1. Kill any running loop — prevents orphaned RAF handles stacking on restart.
   ahStopLoop();
 
   ahMode=ahHPMode; ahDiff=ahHPDiff; ahWinScore=ahHPWinScore;
   var homeEl=document.getElementById('ah-home'), playEl=document.getElementById('ah-play-panel');
   if (homeEl) homeEl.classList.add('hidden');
   if (playEl) playEl.classList.remove('hidden');
-  var p2l=document.getElementById('ah-p2-label'); if (p2l) p2l.textContent=ahMode==='pvb'?'BOT':'P2';
+  var p2l=document.getElementById('ah-p2-label');
+  if (p2l) p2l.textContent=ahMode==='pvb'?'BOT':'P2';
   var ol=document.getElementById('ah-overlay-msg');
   if (ol){ ol.style.display='none'; ol.className='ah-overlay-msg hidden'; }
   var gf=document.getElementById('ah-goal-flash'); if (gf) gf.style.display='none';
 
-  // CRITICAL: clear both pause flags unconditionally before starting the loop.
-  // DZ_PAUSED may be true from the orientation handler, a previous menu open,
-  // or any other source. If it is true when ahLoop starts, the game freezes.
+  // 2. Clear BOTH pause flags unconditionally before the loop starts.
+  //    DZ_PAUSED can be left true by: orientation handler (landscape+hub at load),
+  //    previous menu open, or game switching. Any truthy value freezes ahLoop.
   ahPaused = false;
   window.DZ_PAUSED = false;
 
-  // Re-wire pause button fresh so it's always reliable
-  var pb=document.getElementById('ah-pause-btn');
+  // 3. Re-wire pause button fresh — strips any stale extra listener.
+  var pb = document.getElementById('ah-pause-btn');
   if (pb) {
-    pb.textContent='⏸';
-    var pbNew=pb.cloneNode(true);
-    pb.parentNode.replaceChild(pbNew,pb);
-    pbNew.addEventListener('click',function(){
-      ahPaused=!ahPaused;
-      this.textContent=ahPaused?'▶':'⏸';
+    pb.textContent = '⏸';
+    var pbNew = pb.cloneNode(true);
+    pb.parentNode.replaceChild(pbNew, pb);
+    pbNew.addEventListener('click', function(){
+      ahPaused = !ahPaused;
+      this.textContent = ahPaused ? '▶' : '⏸';
       ahSnd.click();
     });
   }

@@ -100,6 +100,21 @@ html, body {
 /* Single source of truth for hiding screens and elements */
 .hidden { display: none !important; }
 
+/* ── Performance: skip rendering of off-screen game screens ────────────
+   content-visibility:auto tells the browser to skip layout+paint for any
+   screen not currently visible — eliminating the cost of compositing 30+
+   game screens simultaneously. contain:layout style paint stops each
+   screen's internals from causing global layout recalculations. */
+[id^="screen-"] {
+  contain: layout style paint;
+}
+/* FIX 4: 'auto' is for scroll-offscreen visibility skipping — it does nothing on
+   display:none elements. 'hidden' is the correct value: it preserves the rendering
+   state in memory so switching back is instant, while still skipping all layout/paint. */
+[id^="screen-"].hidden {
+  content-visibility: hidden;
+}
+
 /* ── Screen layout ───────────────────────────────────────── */
 /*
   Both screens sit in the same document. Only one is visible at a time.
@@ -3027,7 +3042,7 @@ html, body {
 /* ── Win overlay ── */
 #d2048-win-overlay, #tap-win-overlay {
   background: radial-gradient(ellipse at 50% 40%, rgba(13,15,28,0.97), rgba(7,8,15,0.99));
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
 }
 
 /* ── Status text colors ── */
@@ -3343,7 +3358,7 @@ html, body {
   padding: 10px 12px;
   background: rgba(0,0,0,0.6);
   border-bottom: 1px solid rgba(0,229,255,0.12);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
   flex-shrink: 0;
 }
 .ah-back-btn {
@@ -3493,7 +3508,7 @@ html, body {
   justify-content: center;
   gap: 12px;
   background: rgba(2,12,24,0.88);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(8px);
   z-index: 50;
   padding: 32px;
   animation: ahOverlayIn 0.4s cubic-bezier(0.23,1,0.32,1) both;
@@ -3589,7 +3604,7 @@ html, body {
 .canvas-field { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; padding: 12px 8px 16px; }
 .canvas-field canvas { display: block; max-width: 100%; max-height: 100%; border-radius: 16px; border: 2px solid rgba(255,255,255,0.08); touch-action: none; box-shadow: 0 0 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04); }
 .pp-theme .canvas-field canvas { box-shadow: 0 0 60px rgba(0,0,0,0.7), 0 0 40px rgba(255,214,0,0.08), 0 0 0 1px rgba(255,214,0,0.1); }
-.canvas-overlay-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(4,12,28,0.88); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 22px 40px; font-size: 1.65rem; font-weight: 900; color: #fff; text-align: center; letter-spacing: 0.04em; z-index: 99; pointer-events: auto; min-width: 200px; animation: overlayPop 0.2s cubic-bezier(0.34,1.56,0.64,1) both; }
+.canvas-overlay-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(4,12,28,0.88); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 22px 40px; font-size: 1.65rem; font-weight: 900; color: #fff; text-align: center; letter-spacing: 0.04em; z-index: 99; pointer-events: auto; min-width: 200px; animation: overlayPop 0.2s cubic-bezier(0.34,1.56,0.64,1) both; }
 @keyframes overlayPop { from { transform: translate(-50%,-50%) scale(0.8); opacity: 0; } to { transform: translate(-50%,-50%) scale(1); opacity: 1; } }
 
 /* Hub card accents */
@@ -3885,7 +3900,7 @@ html, body {
   padding: 14px 16px;
   background: rgba(0,0,0,0.5);
   border-bottom: 1px solid rgba(0,255,136,0.1);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
 }
 .pb-topbar-back {
   background: none;
@@ -4207,7 +4222,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  backdrop-filter: blur(20px);
+  backdrop-filter: blur(8px);
   position: relative;
   z-index: 2;
   animation: pbPhaseIn 0.4s cubic-bezier(0.23,1,0.32,1) both;
@@ -7898,7 +7913,7 @@ html, body {
   position: absolute;
   inset: 0;
   background: rgba(7,8,15,0.90);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -9535,8 +9550,8 @@ select {
   justify-content: center;
   gap: 5px;
   padding: 0;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.4);
   transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
 }
@@ -9728,8 +9743,8 @@ select {
   height: 100vh;
   background: linear-gradient(180deg, rgba(10,12,25,0.99) 0%, rgba(6,8,18,0.99) 100%);
   border-right: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 1050;
   display: flex;
   flex-direction: column;
@@ -10128,8 +10143,8 @@ select {
   inset: 0;
   z-index: 1990;
   background: rgba(0,0,0,0.82);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -10513,8 +10528,8 @@ select {
   align-items: center;
   justify-content: center;
   padding: 0;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 0 0 0 rgba(0,229,255,0), 0 6px 28px rgba(0,0,0,0.55);
   transition: border-color 0.28s ease, box-shadow 0.28s ease, background 0.28s ease;
   overflow: visible;
@@ -10897,8 +10912,8 @@ select {
   inset: 0;
   z-index: 1990;
   background: rgba(0,0,0,0.88);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -11768,6 +11783,9 @@ canvas {
   height: auto;
   display: block;
   touch-action: none;
+  /* Promote canvas to its own GPU compositor layer so RAF drawing
+     doesn't trigger a full-page repaint on every frame. */
+  will-change: transform;
 }
 
 /* ─── Darts board: responsive sizing ─── */
@@ -13628,7 +13646,7 @@ body.dz-in-game .hamburger-btn {
     position:fixed; inset:0; z-index:120;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     background:rgba(4,5,16,0.96);
-    backdrop-filter:blur(16px);
+    backdrop-filter:blur(8px);
     animation:ldPassIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
     padding:20px;
   }
@@ -13995,8 +14013,8 @@ body.dz-game-landscape-required #dz-portrait-warn {
   z-index: 1100;
   background: rgba(13,15,28,0.92);
   border: 1.5px solid rgba(255,255,255,0.14);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Dropdown opens from top-right */
@@ -14624,8 +14642,8 @@ body.dz-game-landscape-required #dz-portrait-warn {
   gap: 10px !important;
   padding: 8px 14px !important;
   background: rgba(7, 8, 15, 0.95) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
   flex-shrink: 0 !important;
   width: 100% !important;
@@ -14853,8 +14871,8 @@ body.dz-game-landscape-required #dz-portrait-warn {
   top: 0 !important;
   z-index: 10 !important;
   background: rgba(7, 8, 15, 0.96) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
   border-bottom: 1px solid rgba(255,255,255,0.06) !important;
   padding: 8px 14px !important;
 }
@@ -15448,8 +15466,8 @@ body.dz-game-landscape-required #dz-portrait-warn {
   border-radius: 10px;
   background: rgba(13, 15, 28, 0.92);
   border: 1.5px solid rgba(255,255,255,0.15);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -15683,8 +15701,8 @@ body.dz-game-landscape-required #dz-portrait-warn {
   border-radius: 10px !important;
   background: rgba(13,15,28,0.92) !important;
   border: 1.5px solid rgba(255,255,255,0.15) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
   cursor: pointer !important;
   display: none !important;           /* shown only in games via body.dz-in-game */
   align-items: center !important;
@@ -16024,8 +16042,8 @@ body::-webkit-scrollbar,
   inset: 0;
   z-index: 100000;
   background: rgba(4,6,18,0.97);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -16096,8 +16114,8 @@ body::-webkit-scrollbar,
   cursor: pointer !important;
   align-items: center !important;
   justify-content: center !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.45) !important;
   transition: border-color 0.22s, background 0.22s, box-shadow 0.22s !important;
   padding: 0 !important;
@@ -16285,8 +16303,8 @@ body::-webkit-scrollbar,
   inset: 0;
   z-index: 50000;
   background: rgba(4,6,18,0.97);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;

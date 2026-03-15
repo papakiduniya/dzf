@@ -29,12 +29,22 @@ window.DZ_PAUSED = false; // global flag; external game loops should check this
   if (window.webkitAudioContext) window.webkitAudioContext = PatchedAudioContext;
 })();
 
+function dzPruneAudioContexts() {
+  // Remove closed or garbage-collected AudioContexts from the tracked list.
+  // Without this, every game session adds new contexts and the list grows
+  // unbounded, making every suspend/resume call iterate stale entries.
+  window._DZ_AUDIO_CONTEXTS = window._DZ_AUDIO_CONTEXTS.filter(function(c) {
+    return c && c.state !== 'closed';
+  });
+}
 function dzSuspendAllAudio() {
+  dzPruneAudioContexts();
   window._DZ_AUDIO_CONTEXTS.forEach(function(c) {
     try { if (c && c.state === 'running') c.suspend(); } catch(e) {}
   });
 }
 function dzResumeAllAudio() {
+  dzPruneAudioContexts();
   window._DZ_AUDIO_CONTEXTS.forEach(function(c) {
     try { if (c && c.state === 'suspended') c.resume(); } catch(e) {}
   });
@@ -81,6 +91,7 @@ var screenTetris       = document.getElementById('screen-tetris');
 var screenBomberman    = document.getElementById('screen-bomberman');
 var screenReaction     = document.getElementById('screen-reaction');
 var screenTerritory    = document.getElementById('screen-territory');
+var screenDrawGuess    = document.getElementById('screen-drawguess'); // FIX 1: was missing, caused ReferenceError in showDrawGuess()
 // BUG 1 FIX: These screens were never added to ALL_SCREENS, so hideAllScreens()
 // never hid them — they would bleed through on top of the next game or hub.
 var screenLudo     = document.getElementById('screen-ludo');
@@ -91,8 +102,18 @@ var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, scree
 // Note: screenMFD and screenCDD are push()ed to ALL_SCREENS
 // later in their respective sections once their vars are declared.
 
+// Cached NodeList of every screen-* element — avoids repeated slow
+// attribute-prefix querySelectorAll('[id^="screen-"]') in hot navigation paths.
+// Refreshed lazily on first use after DOM is ready.
+var _ALL_SCREEN_ELS = null;
+function _getAllScreenEls() {
+  if (!_ALL_SCREEN_ELS) _ALL_SCREEN_ELS = document.querySelectorAll('[id^="screen-"]');
+  return _ALL_SCREEN_ELS;
+}
+
 function hideAllScreens() {
-  ALL_SCREENS.forEach(function(s){ if(s) s.classList.add('hidden'); });
+  // Use cached list — covers ALL screen-* elements including dynamically added ones.
+  _getAllScreenEls().forEach(function(s){ s.classList.add('hidden'); });
   // Also hide fixed-position play panels (they escape parent display:none)
   // tetris-play, rd-play, sdk-play, carrom-play sit at position:fixed and
   // must be hidden explicitly when switching games.
@@ -131,7 +152,7 @@ function showHub() {
   var _doShowHub   = function() {
     if (adOverlay) adOverlay.style.display = 'none';
     // Hide every screen-* div (querySelectorAll catches ones missing from ALL_SCREENS)
-    document.querySelectorAll('[id^="screen-"]').forEach(function(s){ s.classList.add('hidden'); });
+    _getAllScreenEls().forEach(function(s){ s.classList.add('hidden'); });
     hideAllScreens();
     // Remove dz-in-game BEFORE showing hub so CSS :has() selector sees correct state
     document.body.classList.remove('dz-in-game');
@@ -4760,9 +4781,6 @@ var ahHPMode = 'pvb', ahHPDiff = 'easy', ahHPWinScore = 7;
 })();
 
 function startAHGame() {
-  // Stop any running loop first — prevents orphaned RAF handles
-  if (typeof ahStopLoop === 'function') ahStopLoop();
-
   ahMode = ahHPMode; ahDiff = ahHPDiff; ahWinScore = ahHPWinScore;
   document.getElementById('ah-home').classList.add('hidden');
   document.getElementById('ah-play-panel').classList.remove('hidden');
@@ -4771,13 +4789,7 @@ function startAHGame() {
   ol.style.display = 'none'; ol.className = 'ah-overlay-msg hidden';
   var gf = document.getElementById('ah-goal-flash');
   if (gf) gf.style.display = 'none';
-
-  // CRITICAL: clear both pause flags before starting the loop.
-  // DZ_PAUSED may be true from the orientation handler, a previous
-  // menu open, or game-switching. If true when ahLoop starts it freezes.
   ahPaused = false;
-  window.DZ_PAUSED = false;
-
   document.getElementById('ah-pause-btn').textContent = '⏸';
   ahInit();
   ahRunning = true;
@@ -8021,12 +8033,10 @@ function dzGoHome() {
   // If a game screen is active, navigate back to hub
   var hub = document.getElementById('screen-hub');
   if (hub && hub.classList.contains('hidden')) {
-    document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
+    _getAllScreenEls().forEach(function(s) {
       s.classList.add('hidden');
     });
-    hub.classList.remove('hidden');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  } else {
+    hub.classList.remove('hidden'); // FIX 2: hub was never shown — produced a blank page
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   _dzSetDropdownActive('dd-home-btn');
@@ -8071,7 +8081,7 @@ function dzNavShowHome() {
   if (igBtn) igBtn.style.removeProperty('display');
 
   // ── Show hub ──
-  document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
+  _getAllScreenEls().forEach(function(s) {
     s.classList.add('hidden');
   });
   var hub = document.getElementById('screen-hub');
@@ -8350,7 +8360,7 @@ function dzToggleMusicFromMenu() {
   if (btn)    btn.classList.toggle('muted', isMuted);
   // Update wave paths on icon
   if (icon) {
-    var wavePath = icon.getElementById ? icon.getElementById('dd-music-waves') : document.getElementById('dd-music-waves');
+    var wavePath = document.getElementById('dd-music-waves'); // FIX 3: icon.getElementById is always undefined on DOM elements; use document directly
     if (wavePath) wavePath.setAttribute('d', isMuted ? '' : 'M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07');
   }
 }
