@@ -4957,133 +4957,149 @@ html, body {
   padding: 8px 0;
 }
 
-/* The dot/line grid — columns/rows set dynamically by JS */
+/* ── CDD Grid — columns/rows set by JS gridTemplateColumns/Rows ── */
 #cdd-grid {
   display: grid;
   gap: 0;
   user-select: none;
-  touch-action: manipulation;
+  /* No overflow, no transform — plain grid */
 }
 
-/* Dots */
+/* ── Dot cells (even row & col) ── */
 .cdd-dot {
-  width:  var(--cdd-dot-sz, 12px);
-  height: var(--cdd-dot-sz, 12px);
-  border-radius: 50%;
-  background: var(--cdd-dot);
-  box-shadow: 0 0 6px rgba(226,232,240,0.6);
-  z-index: 2;
-  position: relative;
-  align-self: center;
-  justify-self: center;
-}
-
-/* Lines */
-.cdd-line {
-  cursor: pointer;
-  position: relative;
+  width:  100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1;
-  touch-action: manipulation;
+  pointer-events: none;
+}
+.cdd-dot::after {
+  content: '';
+  width:  12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cdd-dot);
+  box-shadow: 0 0 5px rgba(226,232,240,0.5);
+  flex-shrink: 0;
 }
 
-/* BUG 4 FIX: Base ::before styles added so the pseudo-element exists on all
-   devices. The @media (pointer: coarse) block only sets top/bottom/left/right
-   offsets — without content/'', position:absolute and inset:0 here, the
-   pseudo-element is never created and touch hit-target expansion never fires. */
-.cdd-line::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2; /* sits above ::after visual bar to capture pointer events */
-}
-.cdd-line.h-line,
-.cdd-line.v-line {
-  width: 100%;
+/* ── Horizontal line cells (even row, odd col) ── */
+.cdd-cell-hline {
+  width:  100%;
   height: 100%;
-  align-self: stretch;
-  justify-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  /* Entire cell area is tappable */
+}
+.cdd-cell-hline:not(.drawn):hover .cdd-bar-h,
+.cdd-cell-hline:not(.drawn):active .cdd-bar-h {
+  background: rgba(255,255,255,0.4);
+}
+.cdd-bar-h {
+  width:  calc(100% - 6px);
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.12);
+  transition: background 0.15s;
+  pointer-events: none; /* bar is visual only — cell handles clicks */
+  flex-shrink: 0;
 }
 
-/* Visual bar */
-.cdd-line::after {
-  content: '';
-  display: block;
-  border-radius: 4px;
-  background: var(--cdd-line-empty);
-  transition: background 0.2s, box-shadow 0.2s;
+/* ── Vertical line cells (odd row, even col) ── */
+.cdd-cell-vline {
+  width:  100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.cdd-line.h-line::after {
-  width: calc(100% - 4px);
-  height: 6px;
+.cdd-cell-vline:not(.drawn):hover .cdd-bar-v,
+.cdd-cell-vline:not(.drawn):active .cdd-bar-v {
+  background: rgba(255,255,255,0.4);
 }
-.cdd-line.v-line::after {
-  width: 6px;
-  height: calc(100% - 4px);
+.cdd-bar-v {
+  width:  10px;
+  height: calc(100% - 6px);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.12);
+  transition: background 0.15s;
+  pointer-events: none;
+  flex-shrink: 0;
 }
-.cdd-line:not(.drawn):hover::after,
-.cdd-line:not(.drawn):focus::after {
-  background: var(--cdd-line-hover);
-  box-shadow: 0 0 8px rgba(255,255,255,0.18);
+
+/* ── Drawn line states ── */
+.cdd-cell-hline.drawn,
+.cdd-cell-vline.drawn {
+  cursor: default;
+  pointer-events: none; /* drawn lines cannot be re-clicked */
 }
-.cdd-line.drawn { cursor: default; pointer-events: none; }
-.cdd-line.drawn-p1::after {
+.cdd-bar-h.bar-drawn.drawn-p1,
+.cdd-bar-v.bar-drawn.drawn-p1 {
   background: var(--cdd-p1);
   box-shadow: 0 0 8px var(--cdd-p1-glow);
 }
-.cdd-line.drawn-p2::after {
+.cdd-bar-h.bar-drawn.drawn-p2,
+.cdd-bar-v.bar-drawn.drawn-p2 {
   background: var(--cdd-p2);
   box-shadow: 0 0 8px var(--cdd-p2-glow);
 }
-.cdd-line.line-just-drawn::after { animation: cdd-line-pop 0.3s ease-out; }
-@keyframes cdd-line-pop {
-  0%   { transform: scale(0.7); opacity: 0.5; }
-  60%  { transform: scale(1.1); }
-  100% { transform: scale(1);   opacity: 1; }
-}
 
-/* Box cells */
-.cdd-box {
+/* ── Box cells (odd row, odd col) ── */
+.cdd-cell-box {
+  width:  100%;
+  height: 100%;
   position: relative;
-  border-radius: 4px;
-  transition: background 0.4s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  min-width: 0;
-  min-height: 0;
+  border-radius: 3px;
+  transition: background 0.35s ease;
+  pointer-events: none; /* boxes are not interactive */
 }
-.cdd-box.completed-p1 {
-  background: rgba(96, 165, 250, 0.18);
-  box-shadow: inset 0 0 18px rgba(96,165,250,0.10);
+.cdd-cell-box.completed-p1 {
+  background: rgba(96,165,250,0.22);
+  box-shadow: inset 0 0 14px rgba(96,165,250,0.12);
 }
-.cdd-box.completed-p2 {
-  background: rgba(251, 113, 133, 0.18);
-  box-shadow: inset 0 0 18px rgba(251,113,133,0.10);
+.cdd-cell-box.completed-p2 {
+  background: rgba(251,113,133,0.22);
+  box-shadow: inset 0 0 14px rgba(251,113,133,0.12);
 }
 .cdd-box-label {
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(0.42rem, 1.2vw, 0.6rem);
+  font-size: clamp(0.4rem, 1.2vw, 0.65rem);
   font-weight: 900;
   letter-spacing: 0.05em;
   opacity: 0;
-  transform: scale(0.5);
-  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: scale(0.4);
+  transition: opacity 0.3s, transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
 }
-.cdd-box.completed-p1 .cdd-box-label { color: var(--cdd-p1); opacity: 0.85; transform: scale(1); }
-.cdd-box.completed-p2 .cdd-box-label { color: var(--cdd-p2); opacity: 0.85; transform: scale(1); }
-.cdd-box-just-claimed { animation: cdd-box-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.cdd-cell-box.completed-p1 .cdd-box-label {
+  color: var(--cdd-p1); opacity: 0.9; transform: scale(1);
+}
+.cdd-cell-box.completed-p2 .cdd-box-label {
+  color: var(--cdd-p2); opacity: 0.9; transform: scale(1);
+}
+.cdd-box-just-claimed { animation: cdd-box-pop 0.4s cubic-bezier(0.34,1.56,0.64,1); }
 @keyframes cdd-box-pop {
   0%   { transform: scale(0.7); }
-  60%  { transform: scale(1.12); }
+  60%  { transform: scale(1.1); }
   100% { transform: scale(1); }
 }
 
-/* Locked grid */
-#cdd-grid.locked .cdd-line:not(.drawn) { cursor: not-allowed; pointer-events: none; }
+/* ── Locked grid (bot thinking) ── */
+#cdd-grid.locked .cdd-cell-hline,
+#cdd-grid.locked .cdd-cell-vline {
+  cursor: not-allowed;
+  pointer-events: none;
+}
 #cdd-grid.locked .cdd-line:not(.drawn)::after { background: rgba(255,255,255,0.04); }
 
 /* Game over overlay */
@@ -5092,13 +5108,18 @@ html, body {
   inset: 0;
   background: rgba(6,8,24,0.88);
   backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  /* z-index must beat #dz-universal-topbar (200) and wrapper (5) stacking contexts */
+  z-index: 9999;
+  pointer-events: all;
   animation: cdd-fade-in 0.35s ease;
+  /* Ensure it renders above everything on mobile WebKit */
+  isolation: isolate;
 }
-#cdd-result.hidden { display: none !important; }
+#cdd-result.hidden { display: none !important; pointer-events: none; }
 @keyframes cdd-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
@@ -5113,6 +5134,9 @@ html, body {
   width: 90%;
   box-shadow: 0 0 60px -12px rgba(255,145,0,0.3);
   animation: cdd-slide-up 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  position: relative;
+  z-index: 1;
+  pointer-events: all;
 }
 @keyframes cdd-slide-up {
   from { transform: translateY(30px) scale(0.95); opacity: 0; }
@@ -5132,18 +5156,25 @@ html, body {
   color: #94a3b8;
   margin-bottom: 24px;
 }
-#cdd-result-btns { display: flex; gap: 10px; justify-content: center; }
+#cdd-result-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 #cdd-result-btns button {
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  padding: 10px 20px;
+  padding: 12px 24px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
   text-transform: uppercase;
   transition: transform 0.15s, box-shadow 0.15s;
+  min-height: 48px;
+  min-width: 120px;
+  position: relative;
+  z-index: 1;
+  pointer-events: all;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 #cdd-result-btns button:active { transform: scale(0.95); }
 #cdd-play-again {
@@ -5158,18 +5189,21 @@ html, body {
 }
 
 /* Controls */
-#cdd-controls { display: flex; gap: 10px; margin-top: 4px; justify-content: center; }
+#cdd-controls { display: flex; gap: 10px; margin-top: 4px; justify-content: center; flex-wrap: wrap; }
 #cdd-controls button {
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  padding: 9px 20px;
+  padding: 10px 20px;
   border-radius: 10px;
   border: none;
   cursor: pointer;
   text-transform: uppercase;
   transition: transform 0.15s, opacity 0.15s;
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 #cdd-controls button:active { transform: scale(0.95); }
 #cdd-reset-btn {
@@ -13267,6 +13301,15 @@ canvas {
   opacity: 1 !important;
   pointer-events: auto !important;
 }
+body.dz-in-game #dz-hamburger,
+body.dz-in-game .hamburger-btn {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+body.dz-in-game #dz-ig-menu-btn {
+  display: flex !important;
+}
 
 /* Dropdown opens from top-right */
 #dz-dropdown {
@@ -15642,7 +15685,7 @@ body.dz-game-landscape-required #dz-portrait-warn {
   backdrop-filter: blur(10px) !important;
   -webkit-backdrop-filter: blur(10px) !important;
   cursor: pointer !important;
-  display: none !important;           /* JS: sets to flex inside games */
+  display: none !important;
   align-items: center !important;
   justify-content: center !important;
   box-shadow: 0 4px 20px rgba(0,0,0,0.55) !important;
@@ -15664,6 +15707,22 @@ body.dz-game-landscape-required #dz-portrait-warn {
 #dz-ig-menu-btn.open .igm-line:first-child { transform: translateY(7px) rotate(45deg) !important; background: #00e5ff !important; }
 #dz-ig-menu-btn.open .igm-line--mid        { opacity: 0 !important; transform: scaleX(0) !important; }
 #dz-ig-menu-btn.open .igm-line--bot        { transform: translateY(-7px) rotate(-45deg) !important; background: #00e5ff !important; }
+
+/* ── Hide game menu btn on hub, show hamburger on hub ──────────
+   Pure CSS — no JS needed. Uses the :not(.hidden) state of screen-hub.
+   When #screen-hub is visible (!.hidden), the game btn hides.
+   When #screen-hub is hidden, the game btn shows. ──────────── */
+
+/* Game btn hidden when hub is active */
+#screen-hub:not(.hidden) ~ * #dz-ig-menu-btn,
+body:has(#screen-hub:not(.hidden)) #dz-ig-menu-btn {
+  display: none !important;
+}
+
+/* Hub hamburger hidden when a game screen is active */
+body:has([id^="screen-"]:not(#screen-hub):not(.hidden)) #dz-hamburger {
+  display: none !important;
+}
 
 /* ─── 4. In-game slide panel ──────────────────────────────────── */
 #dz-ig-menu {
@@ -16896,12 +16955,11 @@ body::-webkit-scrollbar,
     visibility: hidden !important;
   }
 
-  /* Also hide the fixed play panels even when NOT .hidden
-     (they are display:none when .hidden but position:fixed escapes parent) */
-  html #tetris-play,
-  html #rd-play,
-  html #carrom-play,
-  html #sdk-play {
+  /* Fixed play panels in landscape — only hide when they have .hidden class */
+  html #tetris-play.hidden,
+  html #rd-play.hidden,
+  html #carrom-play.hidden,
+  html #sdk-play.hidden {
     display: none !important;
     visibility: hidden !important;
     pointer-events: none !important;

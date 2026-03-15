@@ -254,8 +254,10 @@
       stopTimer();
       window.scrollTo(0, 0);
       var backBtn = document.getElementById('sdk-back-play'); if (backBtn) backBtn.style.display = 'none';
-      $('sdk-play').classList.add('hidden');
-      $('sdk-home').classList.remove('hidden');
+      var playEl = $('sdk-play');
+      if (playEl) { playEl.classList.add('hidden'); playEl.style.display = 'none'; }
+      var homeEl = $('sdk-home');
+      if (homeEl) { homeEl.classList.remove('hidden'); homeEl.style.removeProperty('display'); homeEl.style.removeProperty('visibility'); }
     }
   });
 
@@ -272,9 +274,10 @@
   document.addEventListener('click', e => {
     if (e.target.id === 'sdk-start-btn' || e.target.closest('#sdk-start-btn')) {
       window.scrollTo(0, 0);
-      $('sdk-home').classList.add('hidden');
+      var homeEl = $('sdk-home');
+      if (homeEl) { homeEl.classList.add('hidden'); homeEl.style.display = 'none'; }
       var playEl = $('sdk-play');
-      if (playEl) { playEl.classList.remove('hidden'); playEl.scrollTop = 0; }
+      if (playEl) { playEl.classList.remove('hidden'); playEl.style.removeProperty('display'); playEl.scrollTop = 0; }
       var backBtn = document.getElementById('sdk-back-play'); if (backBtn) backBtn.style.display = 'block';
       initGame();
     }
@@ -283,7 +286,7 @@
   // "New Puzzle" on result
   document.addEventListener('click', e => {
     if (e.target.id === 'sdk-again') {
-      $('sdk-result').classList.add('hidden');
+      var res = $('sdk-result'); if (res) res.classList.add('hidden');
       initGame();
     }
   });
@@ -710,6 +713,10 @@
   }
   function stopTimer(){ clearInterval(timerInt); timerInt=null; }
   function fmt(s){ return `${(s/60|0)}:${(s%60).toString().padStart(2,'0')}`; }
+
+  /* ── Expose stop/pause so dzPauseAllGames() and orientation handler can call them ── */
+  window.sudokuStop  = function() { stopTimer(); };
+  window.sudokuPause = function() { stopTimer(); };
 
   /* ── Buzz (haptic) ── */
   function buzz(){ if('vibrate' in navigator) navigator.vibrate([50,20,50]); }

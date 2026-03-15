@@ -93,6 +93,15 @@ var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, scree
 
 function hideAllScreens() {
   ALL_SCREENS.forEach(function(s){ if(s) s.classList.add('hidden'); });
+  if (typeof window.dzHideAllFixedPanels === 'function') {
+    window.dzHideAllFixedPanels();
+  } else {
+    ['tetris-play','rd-play','sdk-play','carrom-play'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) { el.classList.add('hidden'); }
+    });
+  }
+  document.body.classList.add('dz-in-game');
 }
 
 function showHub() {
@@ -120,6 +129,7 @@ function showHub() {
     hideAllScreens();
     screenHub.classList.remove('hidden');
     SoundManager.backToHub();
+    if (window.dzHideGameMenuBtn) window.dzHideGameMenuBtn();
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
@@ -148,6 +158,7 @@ function showTTT() {
   screenTTT.classList.remove('hidden');
   tttRestart();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('ttt');
 }
 
 function showRPS() {
@@ -155,6 +166,7 @@ function showRPS() {
   screenRPS.classList.remove('hidden');
   rpsRestart();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('rps');
 }
 
 function showTap() {
@@ -162,6 +174,7 @@ function showTap() {
   screenTap.classList.remove('hidden');
   tapReset();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('tapbattle');
 }
 
 function show2048() {
@@ -169,6 +182,7 @@ function show2048() {
   screen2048.classList.remove('hidden');
   d2048Init();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('duel2048');
 }
 
 function showC4() {
@@ -182,12 +196,14 @@ function showC4() {
   if (c4HomeEl) { c4HomeEl.classList.remove('hidden'); }
   if (c4PlayEl) { c4PlayEl.classList.add('hidden'); }
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('c4');
 }
 function showCricket() {
   hideAllScreens();
   screenCricket.classList.remove('hidden');
   cricResetToSetup();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('cricket');
 }
 
 function showAH() {
@@ -199,6 +215,7 @@ function showAH() {
   if (ahPlay) ahPlay.classList.add('hidden');
   ahStopLoop();
   window.scrollTo(0, 0);
+  if(window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('airhockey');
 }
 
 function showPB() {
@@ -317,8 +334,14 @@ function showDrawGuess() {
 function showReaction() {
   hideAllScreens();
   if (screenReaction) screenReaction.classList.remove('hidden');
+  // Force rd-play hidden and rd-home visible before reactionInit runs
+  var rdPlay = document.getElementById('rd-play');
+  var rdHome = document.getElementById('rd-home');
+  if (rdPlay) { rdPlay.classList.add('hidden'); rdPlay.style.display = 'none'; }
+  if (rdHome) { rdHome.classList.remove('hidden'); rdHome.style.removeProperty('display'); rdHome.style.removeProperty('visibility'); }
   if (typeof reactionInit === 'function') reactionInit();
   window.scrollTo(0, 0);
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('reaction');
 }
 
 function showTerritory() {
@@ -353,10 +376,11 @@ function showSudoku() {
     s.classList.remove('hidden');
     var home = document.getElementById('sdk-home');
     var play = document.getElementById('sdk-play');
-    if (home) home.classList.remove('hidden');
-    if (play) play.classList.add('hidden');
+    if (play) { play.classList.add('hidden'); play.style.display = 'none'; }
+    if (home) { home.classList.remove('hidden'); home.style.removeProperty('display'); home.style.removeProperty('visibility'); }
   }
   window.scrollTo(0, 0);
+  if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn('sudoku');
 }
 
 function showCarrom() {
@@ -5795,6 +5819,7 @@ function mfdInit(mode, diff) {
     if (play) play.classList.add('hidden');
     if (home) home.classList.remove('hidden');
     SoundManager.backToHub();
+    document.body.classList.remove('dz-in-game');
     window.scrollTo(0, 0);
   });
 
@@ -5880,6 +5905,8 @@ var GameLoader = (function() {
     var el = document.getElementById(containerId);
     if (el) { el.classList.remove('hidden'); }
     window.scrollTo(0, 0);
+    // Show game menu button directly — reliable vs event timing issues
+    if (window.dzShowGameMenuBtn) window.dzShowGameMenuBtn(containerId.replace('screen-',''));
   }
 
   /** Safely call a lifecycle method on a config object. */
@@ -6882,7 +6909,11 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     gameOver:       false,
     botThinking:    false,
     totalLines:     24,
-    drawnLines:     0
+    drawnLines:     0,
+    _botTimeout:    null,
+    _resizeHandler: null,
+    _lastDOT:       14,
+    _lastCELL:      60
   };
 
   // ── DOM Refs ────────────────────────────────────────────────
@@ -7017,27 +7048,31 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
   function cddStartGame() {
     cddDestroyGame();
 
-    // Reset state
-    cdd.lines    = {};
-    cdd.boxes    = {};
-    cdd.scores   = {p1: 0, p2: 0};
+    cdd.lines       = {};
+    cdd.boxes       = {};
+    cdd.scores      = {p1: 0, p2: 0};
     cdd.currentTurn = 'p1';
     cdd.gameOver    = false;
     cdd.botThinking = false;
     cdd.drawnLines  = 0;
 
-    // Build data structures
     cddBuildData();
 
-    // Render grid
-    cddRenderGrid();
+    // Show panel first so layout is ready for measurement
+    cddHomePanel.classList.add('hidden');
+    cddPlayPanel.classList.remove('hidden');
+    cddResult.classList.add('hidden');
 
-    // Update UI
-    cddUpdateScores();
-    cddUpdateTurnUI();
-    cddHideResult();
+    // Render after browser has laid out the panel
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        cddRenderGrid();
+        cddUpdateScores();
+        cddUpdateTurnUI();
+        cddHideResult();
+      });
+    });
 
-    // Mode labels
     if (cddModeLabel) {
       cddModeLabel.textContent = cdd.gameMode === 'bot'
         ? 'vs Bot (' + cdd.difficulty.toUpperCase() + ')'
@@ -7047,42 +7082,36 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
       cddP2Label.textContent = cdd.gameMode === 'bot' ? 'Bot' : 'Player 2';
     }
 
-    // Show play panel
-    cddHomePanel.classList.add('hidden');
-    cddPlayPanel.classList.remove('hidden');
-    cddResult.classList.add('hidden');
-
     window.scrollTo(0, 0);
   }
 
   function cddDestroyGame() {
-    // No timers to clear except bot timeout
-    if (cdd._botTimeout) {
-      clearTimeout(cdd._botTimeout);
-      cdd._botTimeout = null;
-    }
-    cdd.gameOver = true;
+    if (cdd._botTimeout) { clearTimeout(cdd._botTimeout); cdd._botTimeout = null; }
+    cdd.gameOver    = true;
     cdd.botThinking = false;
+    // Clear grid so stale event handlers are removed
+    if (cddGrid) cddGrid.innerHTML = '';
   }
 
   // ── Data Structures ─────────────────────────────────────────
 
   function cddBuildData() {
-    // Horizontal lines: h-{row}-{col}, row=0..3, col=0..2
+    // Horizontal lines: h-{row}-{col}
+    // row = 0..3 (between/around 4 dot-rows), col = 0..2 (3 gaps between 4 dot-cols)
     for (var r = 0; r <= 3; r++) {
       for (var c = 0; c <= 2; c++) {
         var hid = 'h-' + r + '-' + c;
         cdd.lines[hid] = {id: hid, type: 'h', row: r, col: c, isDrawn: false, owner: null};
       }
     }
-    // Vertical lines: v-{row}-{col}, row=0..2, col=0..3
+    // Vertical lines: v-{row}-{col}
+    // row = 0..2 (3 gaps), col = 0..3 (4 dot-cols)
     for (var r = 0; r <= 2; r++) {
       for (var c = 0; c <= 3; c++) {
         var vid = 'v-' + r + '-' + c;
         cdd.lines[vid] = {id: vid, type: 'v', row: r, col: c, isDrawn: false, owner: null};
       }
     }
-
     // Boxes: box-{row}-{col}, row=0..2, col=0..2
     for (var r = 0; r <= 2; r++) {
       for (var c = 0; c <= 2; c++) {
@@ -7100,104 +7129,114 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
         };
       }
     }
+    cdd.totalLines = Object.keys(cdd.lines).length; // 24
   }
 
-  // ── Grid Rendering ──────────────────────────────────────────
+  // ── Grid Rendering ───────────────────────────────────────────
   //
-  // Visual grid is 7×7 cells (for 4×4 dots):
-  //   visual row/col 0,2,4,6 → dot row/col 0,1,2,3
-  //   visual row/col 1,3,5   → line/box row/col 0,1,2
+  // 7×7 CSS grid for 4×4 dots / 3×3 boxes:
+  //   even indices (0,2,4,6) = dot columns/rows  (DOT px wide/tall)
+  //   odd  indices (1,3,5)   = line/box columns/rows  (CELL px wide/tall)
   //
-  // Cell types:
-  //   (even-row, even-col) → dot
-  //   (even-row, odd-col)  → h-line  lineId = h-{vi/2}-{(vj-1)/2}
-  //   (odd-row,  even-col) → v-line  lineId = v-{(vi-1)/2}-{vj/2}
-  //   (odd-row,  odd-col)  → box     boxId  = box-{(vi-1)/2}-{(vj-1)/2}
+  // Cell mapping (vi=grid-row, vj=grid-col):
+  //   (even,even) → dot
+  //   (even,odd)  → h-line  id = h-{vi/2}-{(vj-1)/2}
+  //   (odd,even)  → v-line  id = v-{(vi-1)/2}-{vj/2}
+  //   (odd,odd)   → box     id = box-{(vi-1)/2}-{(vj-1)/2}
 
   function cddRenderGrid() {
     if (!cddGrid) return;
+    // Clear existing content (removes old event listeners automatically)
     cddGrid.innerHTML = '';
     cddGrid.classList.remove('locked');
 
-    // Fixed 7×7 grid for 4×4 dots / 3×3 boxes
-    var DOT  = 12;
-    var availW = Math.min(window.innerWidth - 32, 520);
-    var CELL = Math.floor((availW - 4 * DOT) / 3);
-    CELL = Math.min(CELL, 92);
-    CELL = Math.max(CELL, 28);
+    // Measure the container — it must be visible at this point
+    // (we always call after two rAF frames in cddStartGame)
+    var DOT = 16;  // dot cell size px
+    var wrap = document.getElementById('cdd-grid-wrap');
+    var containerW = wrap ? Math.floor(wrap.getBoundingClientRect().width) : 0;
+    if (containerW < 60) containerW = Math.min(window.innerWidth - 32, 400);
 
-    cddGrid.style.setProperty('--cdd-dot-sz',  DOT  + 'px');
-    cddGrid.style.setProperty('--cdd-cell-sz', CELL + 'px');
+    // Grid total width = 4*DOT + 3*CELL
+    // Solve for CELL: CELL = floor((containerW - 4*DOT - 12) / 3)
+    // The -12 gives 4px padding on each side of the grid
+    var CELL = Math.floor((containerW - 4 * DOT - 12) / 3);
+    CELL = Math.max(36, Math.min(90, CELL));
 
     var tpl = [DOT, CELL, DOT, CELL, DOT, CELL, DOT].map(function(v){ return v + 'px'; }).join(' ');
     cddGrid.style.gridTemplateColumns = tpl;
     cddGrid.style.gridTemplateRows    = tpl;
+    // Store cell size so drawLine can reference it
+    cdd._CELL = CELL;
+    cdd._DOT  = DOT;
 
     for (var vi = 0; vi <= 6; vi++) {
       for (var vj = 0; vj <= 6; vj++) {
-        var el;
-        var ri = vi % 2, rj = vj % 2;
+        var cell = document.createElement('div');
+        var isEvenRow = (vi % 2 === 0);
+        var isEvenCol = (vj % 2 === 0);
 
-        if (ri === 0 && rj === 0) {
-          // DOT
-          el = document.createElement('div');
-          el.className = 'cdd-dot';
+        if (isEvenRow && isEvenCol) {
+          // ── DOT ──
+          cell.className = 'cdd-dot';
 
-        } else if (ri === 0 && rj === 1) {
-          // H-LINE
-          var dotRow = vi / 2;
-          var dotCol = (vj - 1) / 2;
-          var lid = 'h-' + dotRow + '-' + dotCol;
-          el = document.createElement('div');
-          el.className = 'cdd-line h-line';
-          el.setAttribute('data-lineid', lid);
-          el.setAttribute('tabindex', '0');
-          el.setAttribute('role', 'button');
-          el.setAttribute('aria-label', 'Horizontal line row ' + dotRow + ' col ' + dotCol);
-          cddSetLineClickHandler(el, lid);
+        } else if (isEvenRow && !isEvenCol) {
+          // ── HORIZONTAL LINE ──
+          var lid = 'h-' + (vi / 2) + '-' + ((vj - 1) / 2);
+          cell.className = 'cdd-cell-hline';
+          cell.setAttribute('data-lineid', lid);
+          // Visual bar as a real child div (no pseudo-elements = reliable clicks)
+          var bar = document.createElement('div');
+          bar.className = 'cdd-bar-h';
+          bar.setAttribute('data-lineid', lid);
+          cell.appendChild(bar);
+          // Click on the entire cell area
+          (function(lineId, cellEl, barEl) {
+            cellEl.addEventListener('click', function() { cddOnLineClick(lineId); });
+            cellEl.addEventListener('touchend', function(e) {
+              e.preventDefault();
+              cddOnLineClick(lineId);
+            }, {passive: false});
+          })(lid, cell, bar);
 
-        } else if (ri === 1 && rj === 0) {
-          // V-LINE
-          var dotRow = (vi - 1) / 2;
-          var dotCol = vj / 2;
-          var lid = 'v-' + dotRow + '-' + dotCol;
-          el = document.createElement('div');
-          el.className = 'cdd-line v-line';
-          el.setAttribute('data-lineid', lid);
-          el.setAttribute('tabindex', '0');
-          el.setAttribute('role', 'button');
-          el.setAttribute('aria-label', 'Vertical line row ' + dotRow + ' col ' + dotCol);
-          cddSetLineClickHandler(el, lid);
+        } else if (!isEvenRow && isEvenCol) {
+          // ── VERTICAL LINE ──
+          var lid = 'v-' + ((vi - 1) / 2) + '-' + (vj / 2);
+          cell.className = 'cdd-cell-vline';
+          cell.setAttribute('data-lineid', lid);
+          var bar = document.createElement('div');
+          bar.className = 'cdd-bar-v';
+          bar.setAttribute('data-lineid', lid);
+          cell.appendChild(bar);
+          (function(lineId, cellEl) {
+            cellEl.addEventListener('click', function() { cddOnLineClick(lineId); });
+            cellEl.addEventListener('touchend', function(e) {
+              e.preventDefault();
+              cddOnLineClick(lineId);
+            }, {passive: false});
+          })(lid, cell);
 
         } else {
-          // BOX
-          var boxRow = (vi - 1) / 2;
-          var boxCol = (vj - 1) / 2;
-          var bid = 'box-' + boxRow + '-' + boxCol;
-          el = document.createElement('div');
-          el.className = 'cdd-box';
-          el.setAttribute('data-boxid', bid);
+          // ── BOX ──
+          var bid = 'box-' + ((vi - 1) / 2) + '-' + ((vj - 1) / 2);
+          cell.className = 'cdd-cell-box';
+          cell.setAttribute('data-boxid', bid);
           var lbl = document.createElement('span');
           lbl.className = 'cdd-box-label';
-          lbl.textContent = 'P1';
-          el.appendChild(lbl);
+          cell.appendChild(lbl);
         }
 
-        cddGrid.appendChild(el);
+        cddGrid.appendChild(cell);
       }
     }
   }
 
-  function cddSetLineClickHandler(el, lid) {
-    el.addEventListener('click', function() {
-      cddOnLineClick(lid);
-    });
-    el.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        cddOnLineClick(lid);
-      }
-    });
+  // ── Look up a line's DOM cell and bar by lineId ─────────────
+  function cddGetLineEls(lid) {
+    if (!cddGrid) return {cell: null, bar: null};
+    var cell = cddGrid.querySelector('[data-lineid="' + lid + '"].cdd-cell-hline, [data-lineid="' + lid + '"].cdd-cell-vline');
+    var bar  = cell ? cell.querySelector('[data-lineid="' + lid + '"]') : null;
+    return {cell: cell, bar: bar};
   }
 
   // ── Turn Logic ───────────────────────────────────────────────
@@ -7216,25 +7255,24 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     var line = cdd.lines[lid];
     if (!line || line.isDrawn) return;
 
-    // Mark line
     line.isDrawn = true;
     line.owner   = player;
     cdd.drawnLines++;
 
-    // Update DOM for the line
-    var el = cddGrid ? cddGrid.querySelector('[data-lineid="' + lid + '"]') : null;
-    if (el) {
-      el.classList.add('drawn');
-      el.classList.add(player === 'p1' ? 'drawn-p1' : 'drawn-p2');
-      el.classList.add('line-just-drawn');
-      SoundManager.click();
-      setTimeout(function() { if (el) el.classList.remove('line-just-drawn'); }, 400);
+    // Update DOM — target the cell div and its bar child
+    if (cddGrid) {
+      var cell = cddGrid.querySelector('[data-lineid="' + lid + '"]');
+      if (cell) {
+        var cls = player === 'p1' ? 'drawn-p1' : 'drawn-p2';
+        cell.classList.add('drawn', cls);
+        var bar = cell.querySelector('.cdd-bar-h, .cdd-bar-v');
+        if (bar) bar.classList.add('bar-drawn', cls);
+        SoundManager.click();
+      }
     }
 
-    // Check box completion
     var boxesClaimed = cddCheckBoxes(player);
 
-    // Check game over FIRST — before scheduling any bot move
     if (cdd.drawnLines >= cdd.totalLines) {
       cddUpdateScores();
       cddEndGame();
@@ -7242,19 +7280,14 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     }
 
     if (boxesClaimed > 0) {
-      // Player keeps turn
       cddUpdateScores();
       if (cdd.gameOver) return;
-      SoundManager.gameStart(); // box completion sound
+      SoundManager.gameStart();
       cddUpdateTurnUI();
-      // If bot's extra turn
-      if (cdd.gameMode === 'bot' && cdd.currentTurn === 'p2') {
-        cddScheduleBotMove();
-      }
+      if (cdd.gameMode === 'bot' && cdd.currentTurn === 'p2') cddScheduleBotMove();
     } else {
-      // Switch turn
       cddSwitchTurn();
-      SoundManager.tttMove(); // line draw / turn switch sound
+      SoundManager.tttMove();
     }
   }
 
@@ -7285,8 +7318,7 @@ console.log('[DuelZone] Global Systems (GameLoader + GlobalBotEngine) v1.0 loade
     if (!cddGrid) return;
     var el = cddGrid.querySelector('[data-boxid="' + bid + '"]');
     if (!el) return;
-    el.classList.add('completed-' + player);
-    el.classList.add('cdd-box-just-claimed');
+    el.classList.add('completed-' + player, 'cdd-box-just-claimed');
     var lbl = el.querySelector('.cdd-box-label');
     if (lbl) {
       lbl.textContent = cdd.gameMode === 'bot'
@@ -7759,14 +7791,7 @@ var _dzMenuOpen = false;
 // ═══════════════════════════════════════════════════════════
 
 function dzPauseAllGames() {
-  // ── 1. SILENCE ALL AUDIO IMMEDIATELY ──────────────────────────
-  // Suspends every AudioContext in the page — covers SoundManager,
-  // ahAudio, pbAudio, and any context from external .js files.
-  dzSuspendAllAudio();
-
-  // ── 2. SET GLOBAL PAUSE FLAG ──────────────────────────────────
-  // External game RAF loops (tetris.js, reaction.js, etc.) should
-  // guard their loops with: if (window.DZ_PAUSED) return;
+  // No AudioContext suspend — causes glitch pop on resume. DZ_PAUSED flag stops loops.
   window.DZ_PAUSED = true;
 
   // ── 3. PAUSE INTERNAL GAMES (defined in this file) ────────────

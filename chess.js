@@ -2004,6 +2004,20 @@
     });
   }
 
+  // ── Expose stop so dzPauseAllGames / orientation handler can call it ──
+  window.chessStop = function() {
+    if (chess._botTimeout) { clearTimeout(chess._botTimeout); chess._botTimeout = null; }
+    chess.botThinking = false;
+  };
+
+  // ── Re-render board on orientation change so CSS layout reflows correctly ──
+  window.addEventListener('resize', function() {
+    var screen = document.getElementById('screen-chess');
+    if (screen && !screen.classList.contains('hidden')) {
+      if (typeof chessRenderBoard === 'function') chessRenderBoard();
+    }
+  });
+
   console.log('[DuelZone] Chess engine loaded — enhanced UI, 6 levels, board flip, audio, particles.');
 
 })(); // end IIFE

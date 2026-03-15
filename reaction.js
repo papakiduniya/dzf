@@ -20,11 +20,13 @@
     _wired: false,
   };
 
-  window.reactionInit = function () {
+  window.reactionInit    = function () {
     if (!RD._wired) { rdWireUI(); RD._wired = true; }
     rdShowHome();
   };
   window.reactionDestroy = function () { rdStop(); };
+  window.rdStop          = function () { rdStop(); };  // called by dzPauseAllGames
+  window.reactionStop    = function () { rdStop(); };  // alias
 
   function el(id) { return document.getElementById(id); }
   function on(id, fn) { var e = el(id); if (e) e.addEventListener('click', fn); }
@@ -33,9 +35,19 @@
   function rdShowHome() {
     rdStop();
     window.scrollTo(0, 0);
-    el('rd-home').classList.remove('hidden');
-    el('rd-play').classList.add('hidden');
-    var backBtn = el('rd-back-play'); if (backBtn) backBtn.style.display = 'none';
+    var home = el('rd-home');
+    if (home) {
+      home.classList.remove('hidden');
+      home.style.removeProperty('display');
+      home.style.removeProperty('visibility');
+    }
+    var play = el('rd-play');
+    if (play) {
+      play.classList.add('hidden');
+      play.style.display = 'none';
+    }
+    var backBtn = el('rd-back-play');
+    if (backBtn) backBtn.style.display = 'none';
   }
 
   function rdWireUI() {
@@ -92,9 +104,10 @@
     RD.phase = 'wait';
     window.scrollTo(0, 0);
 
-    el('rd-home').classList.add('hidden');
+    var homeEl = el('rd-home');
+    if (homeEl) { homeEl.classList.add('hidden'); homeEl.style.display = 'none'; }
     var playEl = el('rd-play');
-    if (playEl) { playEl.classList.remove('hidden'); playEl.scrollTop = 0; }
+    if (playEl) { playEl.classList.remove('hidden'); playEl.style.removeProperty('display'); playEl.scrollTop = 0; }
     el('rd-result').classList.add('hidden');
     var backBtn = el('rd-back-play'); if (backBtn) backBtn.style.display = 'block';
 
@@ -213,16 +226,13 @@
 
   function rdShowFinal() {
     RD.over = true;
-    var names = ['Player 1', RD.mode === 'bot' ? 'Bot' : 'Player 2'];
-    // BUG 5 FIX: the old code was `RD.roundsWon[0] > RD.roundsWon[1] ? 0 : 1`
-    // which always picked Player 2 on a tie. Handle tie explicitly.
-    if (RD.roundsWon[0] === RD.roundsWon[1]) {
-      // FIX RD-3+4: null-check all result elements before accessing
+    var names    = ['Player 1', RD.mode === 'bot' ? 'Bot' : 'Player 2'];
     var rdTitle  = el('rd-result-title');
     var rdDetail = el('rd-result-detail');
     var rdResult = el('rd-result');
-    if (rdTitle)  rdTitle.textContent  = '🤝 Draw!';
-    if (rdDetail) rdDetail.textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds (tied)';
+    if (RD.roundsWon[0] === RD.roundsWon[1]) {
+      if (rdTitle)  rdTitle.textContent  = '🤝 Draw!';
+      if (rdDetail) rdDetail.textContent = RD.roundsWon[0] + ' – ' + RD.roundsWon[1] + ' rounds (tied)';
     } else {
       var winner = RD.roundsWon[0] > RD.roundsWon[1] ? 0 : 1;
       if (rdTitle)  rdTitle.textContent  = '🏆 ' + names[winner] + ' Wins!';
