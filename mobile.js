@@ -346,10 +346,14 @@
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
         }
+        /* Hide all fixed game panels (tetris-play etc.) via .hidden class */
+        if (typeof window.dzHideAllFixedPanels === 'function') window.dzHideAllFixedPanels();
       } else {
         /* Back to portrait — clear flag ONLY. Do NOT auto-resume.
            User must press ▶ START to play again. */
         window.DZ_PAUSED = false;
+        /* Re-hide fixed panels on portrait return too — belt and suspenders */
+        if (typeof window.dzHideAllFixedPanels === 'function') window.dzHideAllFixedPanels();
       }
       if (typeof window.dzCheckOrientation === 'function') window.dzCheckOrientation();
     }, 150);

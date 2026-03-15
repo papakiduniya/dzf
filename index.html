@@ -4730,55 +4730,91 @@ if (document.readyState === 'loading') {
   (function () {
     'use strict';
 
-    /* Landscape is now ALLOWED — hub page is fully scrollable in landscape.
-       We only stop active game loops so nothing runs in the background.
-       No overlay, no scroll block, no "rotate your phone" message. */
+    /* List of ALL fixed-position game play panels.
+       These are position:fixed so they escape parent display:none.
+       We must manage their .hidden class directly. */
+    var FIXED_PANELS = [
+      'tetris-play', 'rd-play', 'carrom-play', 'sdk-play'
+    ];
+
+    /* ── Forcibly hide every fixed game panel by adding .hidden ──
+       Called defensively on landscape AND on portrait return.
+       This is the permanent fix for "Tetris appears during other games":
+       tetris-play loses .hidden when a game is played, but never gets
+       it back when switching games. We re-add it here every time. */
+    function hideAllFixedPanels() {
+      FIXED_PANELS.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.classList.add('hidden');
+          el.style.display    = '';   /* let .hidden class own this */
+          el.style.visibility = '';
+          el.style.pointerEvents = '';
+        }
+      });
+      /* Also catch any future panels tagged with data-dz-game-panel */
+      document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
+        p.classList.add('hidden');
+        p.style.display    = '';
+        p.style.visibility = '';
+        p.style.pointerEvents = '';
+      });
+    }
+
+    /* Expose globally so showTetris / showCarrom etc. can call it
+       right before they remove .hidden from their own panel */
+    window.dzHideAllFixedPanels = hideAllFixedPanels;
 
     function checkOrientation() {
       var isLandscape = window.innerWidth > window.innerHeight;
+
       if (isLandscape) {
-        /* ── Hide ALL game screens (everything except the hub) ── */
+        /* ── Hide ALL game screens (document-flow, not hub) ── */
         document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
-          if (s.id !== 'screen-hub') {
-            s.style.display = 'none';
-          }
+          if (s.id !== 'screen-hub') s.style.display = 'none';
         });
 
-        /* ── Hide fixed game panels (position:fixed escapes parent display:none) ── */
-        document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
-          p.style.display = 'none';
-          p.style.visibility = 'hidden';
-          p.style.pointerEvents = 'none';
-        });
-        var tp = document.getElementById('tetris-play');
-        if (tp) { tp.style.display = 'none'; tp.style.visibility = 'hidden'; tp.style.pointerEvents = 'none'; }
+        /* ── Hide ALL fixed panels — adds .hidden so CSS can't override ── */
+        hideAllFixedPanels();
 
         /* ── Stop all game loops ── */
         window.DZ_PAUSED = true;
         if (typeof window.dzPauseAllGames === 'function') {
           try { window.dzPauseAllGames(); } catch(e) {}
         } else {
-          var fns = ['tetrisStop','tetrisDestroy','rdStop','reactionStop',
-                     'reactionDestroy','carromStop','sudokuStop','ppStopGame',
-                     'sdStopGame','bombermanDestroy','territoryDestroy'];
-          fns.forEach(function(fn) {
+          ['tetrisStop','tetrisDestroy','rdStop','reactionStop',
+           'reactionDestroy','carromStop','sudokuStop','ppStopGame',
+           'sdStopGame','bombermanDestroy','territoryDestroy'
+          ].forEach(function(fn) {
             try { if (typeof window[fn] === 'function') window[fn](); } catch(e) {}
           });
         }
+
       } else {
-        /* ── Portrait: clear the inline display:none we set, restore flow ── */
+        /* ── Portrait: restore game screen visibility (let .hidden class control) ── */
         document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
-          if (s.id !== 'screen-hub') {
-            s.style.display = '';
+          if (s.id !== 'screen-hub') s.style.display = '';
+        });
+
+        /* ── Fixed panels: clear inline styles only — .hidden class stays intact.
+           If tetris-play, rd-play etc. have .hidden they remain hidden.
+           They will only show when the game actively removes .hidden itself. ── */
+        FIXED_PANELS.forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) {
+            el.style.display       = '';
+            el.style.visibility    = '';
+            el.style.pointerEvents = '';
+            /* DO NOT remove .hidden — that is what was causing Tetris to appear */
           }
         });
         document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
-          p.style.display = '';
-          p.style.visibility = '';
+          p.style.display       = '';
+          p.style.visibility    = '';
           p.style.pointerEvents = '';
+          /* DO NOT remove .hidden */
         });
-        var tp = document.getElementById('tetris-play');
-        if (tp) { tp.style.display = ''; tp.style.visibility = ''; tp.style.pointerEvents = ''; }
+
         window.DZ_PAUSED = false;
       }
     }
@@ -4788,7 +4824,11 @@ if (document.readyState === 'loading') {
     });
     window.addEventListener('resize', checkOrientation);
     checkOrientation();
-    document.addEventListener('DOMContentLoaded', checkOrientation);
+    document.addEventListener('DOMContentLoaded', function() {
+      checkOrientation();
+      /* On page load, ensure all fixed panels start hidden */
+      hideAllFixedPanels();
+    });
     window.dzCheckOrientation = checkOrientation;
   })();
   </script>

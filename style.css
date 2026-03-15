@@ -12040,36 +12040,23 @@ canvas {
 /* ── Base landscape reset for all canvas-heavy game screens ── */
 @media screen and (orientation: landscape) and (max-height: 520px) {
 
-  /* Force every landscape-game screen to fill the viewport with no scroll */
-  #screen-tanks, #screen-spacedodge, #screen-starcatcher,
-  #screen-bomberman, #screen-tetris, #screen-pingpong,
+  /* NOTE: screen-* selectors removed from this group — they were causing
+     #screen-tetris etc. to inherit display:flex and appear below the hub.
+     Game screens are now hidden in landscape via the rules at end of file. */
 
   /* ── Play panels: column layout fills full height ── */
   #tanks-play-panel,
   #sd-play-panel,
   #sc-play-panel,
   #bm-play,
-  #pp-wrap,
-
-
-
-
-
-  /* Tetris play area: row layout with both boards side by side */
-  #tetris-play {
+  #pp-wrap {
     display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;
-    align-items: flex-start !important;
-    height: 100dvh !important;
-    min-height: 100dvh !important;
-    overflow: hidden !important;
-    padding: 4px 6px !important;
-    gap: 10px !important;
+    flex-direction: column;
   }
-  #tetris-play > div {
-    flex: none;
-  }
+
+  /* tetris-play landscape auto-show rule REMOVED — it caused Tetris to appear
+     randomly during other games whenever tetris-play lacked the .hidden class.
+     Tetris layout in landscape is now handled only when explicitly active. */
 
   /* ── HUD bars: ultra-compact single row ── */
   #tanks-hud, #sd-hud, #sc-hud {
@@ -16857,4 +16844,66 @@ body::-webkit-scrollbar,
 [id^="screen-"]::-webkit-scrollbar {
   display: none !important;
   width: 0 !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   CRITICAL FIX: Re-hide game screens in landscape that were forced
+   visible by the group selector in the landscape @media block above
+   (lines ~12041-12069). That block adds display:flex !important to
+   #screen-tetris, #screen-tanks etc. via a group selector ending in
+   #tetris-play. We must override with an even more specific rule.
+
+   Rule: ANY [id^="screen-"].hidden in landscape = display:none.
+   This uses :is() for higher specificity to beat display:flex !important.
+   ══════════════════════════════════════════════════════════════════ */
+
+@media (orientation: landscape) {
+  /* Re-enforce .hidden on ALL game screens in landscape.
+     Uses html prefix for maximum specificity to beat !important chains. */
+  html #screen-ttt.hidden,
+  html #screen-rps.hidden,
+  html #screen-tapbattle.hidden,
+  html #screen-duel2048.hidden,
+  html #screen-c4.hidden,
+  html #screen-cricket.hidden,
+  html #screen-airhockey.hidden,
+  html #screen-passbreach.hidden,
+  html #screen-chess.hidden,
+  html #screen-battleship.hidden,
+  html #screen-checkers.hidden,
+  html #screen-darts.hidden,
+  html #screen-tanks.hidden,
+  html #screen-starcatcher.hidden,
+  html #screen-spacedodge.hidden,
+  html #screen-pingpong.hidden,
+  html #screen-minesweeper.hidden,
+  html #screen-tetris.hidden,
+  html #screen-bomberman.hidden,
+  html #screen-drawguess.hidden,
+  html #screen-reaction.hidden,
+  html #screen-territory.hidden,
+  html #screen-memoryflip.hidden,
+  html #screen-connectdots.hidden,
+  html #screen-snake.hidden,
+  html #screen-typing.hidden,
+  html #screen-blackjack.hidden,
+  html #screen-pixelracer.hidden,
+  html #screen-ludo.hidden,
+  html #screen-sudoku.hidden,
+  html #screen-carrom.hidden {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Also hide the fixed play panels even when NOT .hidden
+     (they are display:none when .hidden but position:fixed escapes parent) */
+  html #tetris-play,
+  html #rd-play,
+  html #carrom-play,
+  html #sdk-play {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
 }

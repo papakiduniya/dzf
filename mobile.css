@@ -1243,3 +1243,22 @@
     pointer-events: none !important;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════
+   § 12  FIXED GAME PANEL HARD HIDE
+         tetris-play, rd-play, carrom-play, sdk-play are
+         position:fixed and escape parent display:none.
+         When they have .hidden they must ALWAYS be display:none.
+         This rule has maximum specificity and overrides everything.
+   ══════════════════════════════════════════════════════════════ */
+
+html body #tetris-play.hidden,
+html body #rd-play.hidden,
+html body #carrom-play.hidden,
+html body #sdk-play.hidden,
+html body [data-dz-game-panel].hidden {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
