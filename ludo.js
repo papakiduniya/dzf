@@ -793,8 +793,11 @@
     }
 
     // One move: auto-execute
+    // Set phase='moving' immediately (not 'pick') so onBoardClick is blocked
+    // during the 420ms delay — otherwise a tap during the window calls pick()
+    // a second time and the token moves twice.
     if (moves.length===1) {
-      movable=moves; phase='pick';
+      movable=[]; phase='moving';
       setMsg('✅',`Rolled ${diceVal}!`);
       setTimeout(()=>pick(curPlayer,moves[0].ti), 420);
       return;

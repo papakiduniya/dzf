@@ -65,6 +65,7 @@
 #dz-univ-game-title {
   order: 2 !important;
   flex: 1 !important;
+  min-width: 0 !important;
   text-align: center !important;
   overflow: hidden !important;
   white-space: nowrap !important;
@@ -121,6 +122,7 @@
   text-transform: uppercase;
   text-align: center;
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -456,10 +458,9 @@
     box-sizing: border-box;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    /* Use dynamic viewport height for correct calc on notch phones */
-    max-height: 100dvh;
-    /* Fallback for browsers without dvh */
+    /* Fallback for browsers without dvh support */
     max-height: 100vh;
+    /* Override with dynamic viewport height on notch phones (clips address bar) */
     max-height: 100dvh;
   }
 
@@ -754,7 +755,7 @@
 
   #mine-flag-p1,
   #mine-flag-p2 {
-    min-height: 42px;
+    min-height: 44px;
     font-size: 0.85rem;
   }
 
@@ -1231,8 +1232,9 @@
 }
 
 /* ── CRITICAL: In landscape, force-hide tetris-play and all fixed game panels ──
-   position:fixed elements escape display:none on parents — must be hidden directly. */
-@media (orientation: landscape) {
+   position:fixed elements escape display:none on parents — must be hidden directly.
+   max-width guard is mandatory here: without it this fires on desktop landscape too. */
+@media (orientation: landscape) and (max-width: 768px) {
 
   #tetris-play,
   [data-dz-game-panel] {
@@ -1630,7 +1632,7 @@ html body [data-dz-game-panel].hidden {
 
 
 /* ══════════════════════════════════════════════════════════════
-   § 13  TETRIS LANDSCAPE LAYOUT
+   § 13b  TETRIS LANDSCAPE LAYOUT
          When .tetris-landscape class is added by JS on rotation,
          switch to a full-viewport side-by-side layout.
    ══════════════════════════════════════════════════════════════ */
@@ -2106,4 +2108,4 @@ html body [data-dz-game-panel].hidden {
     gap: 8px !important;
   }
 
-} /* end @media landscape max-height:600px */
+} /* end §14 @media landscape max-height:600px */

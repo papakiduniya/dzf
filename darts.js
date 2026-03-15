@@ -454,7 +454,8 @@
       detail = 'Exactly equal scores!';
     } else {
       title  = '🎯 ' + names[winner] + ' Wins!';
-      detail = DS.mode === 'bo5' ? 'Series: '+DS.wins[0]+' – '+DS.wins[1] : 'Reached zero!';
+      detail = DS.mode === 'bo5'   ? 'Series: '+DS.wins[0]+' – '+DS.wins[1] :
+               DS.mode === 'timed' ? 'Best score in time!' : 'Reached zero!';
     }
     var resultTitle  = $('darts-result-title');
     var resultDetail = $('darts-result-detail');
@@ -494,7 +495,7 @@
     // Hard/Medium: optimal checkout strategy
     // Step 1: Bullseye for 50 or 25
     if (rem === 50) return {x:cx, y:cy}; // bullseye (50)
-    if (rem === 25) return {x:cx, y:cy+RFRACS.bullseye*r*1.2}; // outer bull (25)
+    if (rem === 25) return {x:cx, y:cy+(RFRACS.bullseye+RFRACS.outerBull)/2*r}; // outer bull (25)
 
     // Step 2: Use checkout table for scores <= 170
     if (diff === 'hard' && rem <= 170) {
@@ -561,7 +562,7 @@
     var dist = Math.sqrt(dx*dx+dy*dy);
     var r = DS.boardR;
     if (dist <= RFRACS.bullseye*r)  return {score:50, label:'BULLSEYE 🎯', isDouble:true};
-    if (dist <= RFRACS.outerBull*r) return {score:25, label:'OUTER BULL', isDouble:false};
+    if (dist <= RFRACS.outerBull*r) return {score:25, label:'OUTER BULL', isDouble:true};
     if (dist > RFRACS.doubleOut*r)  return {score:0,  label:'MISS', isDouble:false};
 
     var angle = Math.atan2(dy, dx) + Math.PI/2;
