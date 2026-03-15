@@ -410,11 +410,12 @@
         b[backRow][0] = makeSquare(null, null, false);
       }
     } else if (move.isEP) {
-      // En passant: capture pawn on same rank as moving pawn's from-row
+      // En passant: the captured pawn is on the same rank as the moving pawn's origin,
+      // at the destination column. Read it BEFORE modifying the board.
+      var capturedRow       = move.fr;
+      captured = { type: b[capturedRow][move.tc].type, color: b[capturedRow][move.tc].color };
       b[move.tr][move.tc]   = { type: piece.type, color: piece.color, moved: true };
       b[move.fr][move.fc]   = makeSquare(null, null, false);
-      var capturedRow       = move.fr; // The captured pawn is on the same row as moving pawn started
-      captured = { type: b[capturedRow][move.tc].type, color: b[capturedRow][move.tc].color };
       b[capturedRow][move.tc] = makeSquare(null, null, false);
     } else {
       // Normal move / capture / promotion
@@ -529,7 +530,9 @@
     }
 
     // Check pawn attacks
-    var pawnDir = (byColor === COLOR.WHITE) ? -1 : 1; // White pawns attack upward (toward higher rows)
+    // A White pawn on (pawnRow, c±1) attacks (r, c) — White pawns attack upward (+1 direction)
+    // A Black pawn on (pawnRow, c±1) attacks (r, c) — Black pawns attack downward (-1 direction)
+    var pawnDir = (byColor === COLOR.WHITE) ? 1 : -1;
     var pawnRow = r + pawnDir;
     if (inBounds(pawnRow, c - 1)) {
       var sq = board[pawnRow][c - 1];
@@ -580,10 +583,11 @@
             if (isInCheck(state.board, color)) continue;  // in check → can't castle
 
             // Check pass-through and destination squares
+            var castleBackRow = (color === COLOR.WHITE) ? 0 : 7;
             var passCol = (mv.tc === 6) ? [5, 6] : [3, 2];
             var passOk  = true;
             for (var p = 0; p < passCol.length; p++) {
-              if (isSquareAttackedBy(state.board, backRow, passCol[p], opp)) {
+              if (isSquareAttackedBy(state.board, castleBackRow, passCol[p], opp)) {
                 passOk = false;
                 break;
               }
@@ -1013,6 +1017,7 @@
         enPassantTarget: result.enPassantTarget,
         halfMoveClock:   0,   // not needed for AI search
         positionHistory: [],  // not needed for AI search — removed slice() (was O(n) per node)
+        gameOver:        false, // never treat child nodes as game-over (handled by moves.length===0)
         _positionKey:    ChessState.prototype._positionKey
       };
 
@@ -1128,7 +1133,7 @@
   // Compute a position key from a FEN string without creating a full ChessState.
   // Used by undoMove to cheaply rebuild positionHistory.
   function _positionKeyFromFEN(fen) {
-    var parts  = fen.trim().split(/s+/);
+    var parts  = fen.trim().split(/\s+/);
     var ranks  = parts[0].split('/');
     var board  = createEmptyBoard();
     for (var r = 0; r < 8; r++) {

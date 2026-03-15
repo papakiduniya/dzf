@@ -108,7 +108,8 @@
     if (homeEl) { homeEl.classList.add('hidden'); homeEl.style.display = 'none'; }
     var playEl = el('rd-play');
     if (playEl) { playEl.classList.remove('hidden'); playEl.style.setProperty('display','flex','important'); playEl.scrollTop = 0; }
-    el('rd-result').classList.add('hidden');
+    var rdResultEl = el('rd-result'); // FIX BUG-1: null-guard missing — every other el() call in this function is guarded but this one wasn't; crashes game-start with TypeError if element is absent
+    if (rdResultEl) rdResultEl.classList.add('hidden');
     var backBtn = el('rd-back-play'); if (backBtn) backBtn.style.display = 'block';
 
     var p2name = RD.mode === 'bot' ? '🤖 Bot' : 'Player 2';
@@ -162,7 +163,8 @@
   }
 
   function rdPlayerTap(pid) {
-    if (RD.over || el('rd-play').classList.contains('hidden')) return;
+    var _play = el('rd-play');
+    if (RD.over || !_play || _play.classList.contains('hidden')) return; // FIX BUG-2: el('rd-play') can be null; direct .classList access throws TypeError — mirrors the null-safe pattern used in the keydown handler above
     if (RD.mode === 'bot' && pid === 1) return; // FIX RD-1: block P2 keyboard tap in bot mode
 
     if (RD.phase === 'ready') {
@@ -200,7 +202,10 @@
     }
   }
 
-  function rdRoundResult(winner, loser, reactionMs) {
+  // FIX BUG-4: removed unused 'loser' parameter. It was passed at every call site
+  // (as '1-pid' or '-1') but never read inside the function — a dead parameter that
+  // implies it does something. Call sites are unchanged; JS silently ignores extras.
+  function rdRoundResult(winner, reactionMs) {
     RD.phase = 'result';
     rdSetSignal('result');
 
@@ -225,7 +230,10 @@
   }
 
   function rdShowFinal() {
-    RD.over = true;
+    rdStop(); // FIX BUG-3: was only setting RD.over=true; rdStop() is the single source of
+             // truth for clearing all three timers and nulling their handles. Without this,
+             // timer handles remain non-null after the game ends (especially in the
+             // auto-expire path where botTimer/waitTimer are not cleared before reaching here).
     var names    = ['Player 1', RD.mode === 'bot' ? 'Bot' : 'Player 2'];
     var rdTitle  = el('rd-result-title');
     var rdDetail = el('rd-result-detail');

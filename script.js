@@ -1597,27 +1597,40 @@ function tapRegisterHit(player) {
 }
 
 // Tap sides
-tapLeftEl.addEventListener('click', function(){
-  if (!tapActive && !tapCountdown) { tapStartCountdown(); return; }
-  tapRegisterHit('p1');
-});
+// FIX TAP-1: On mobile every physical tap fires touchstart followed by a
+// synthetic click. e.preventDefault() should suppress the click, but is
+// unreliable across browsers — so each tap was counted twice.
+// Fix: record the timestamp of each touchstart; the click handler bails
+// out if it fires within 500 ms of a touch (the browser click always
+// arrives well within that window).
+var _tapLeftLastTouch  = 0;
+var _tapRightLastTouch = 0;
+
 tapLeftEl.addEventListener('touchstart', function(e){
   e.preventDefault();
+  _tapLeftLastTouch = Date.now();
   if (!tapActive && !tapCountdown) { tapStartCountdown(); return; }
   tapRegisterHit('p1');
 }, { passive: false });
-
-tapRightEl.addEventListener('click', function(){
-  if (tapMode === 'pve') return; // bot only
+tapLeftEl.addEventListener('click', function(){
+  if (Date.now() - _tapLeftLastTouch < 500) return; // suppress synthetic post-touch click
   if (!tapActive && !tapCountdown) { tapStartCountdown(); return; }
-  tapRegisterHit('p2');
+  tapRegisterHit('p1');
 });
+
 tapRightEl.addEventListener('touchstart', function(e){
   e.preventDefault();
   if (tapMode === 'pve') return;
+  _tapRightLastTouch = Date.now();
   if (!tapActive && !tapCountdown) { tapStartCountdown(); return; }
   tapRegisterHit('p2');
 }, { passive: false });
+tapRightEl.addEventListener('click', function(){
+  if (tapMode === 'pve') return; // bot only
+  if (Date.now() - _tapRightLastTouch < 500) return; // suppress synthetic post-touch click
+  if (!tapActive && !tapCountdown) { tapStartCountdown(); return; }
+  tapRegisterHit('p2');
+});
 
 // Mode buttons
 document.getElementById('tap-btn-pvp').addEventListener('click', function(){
@@ -2613,9 +2626,16 @@ function cricSetNumpadDisabled(disabled) {
 function cricHandlePlay(playerNum) {
   if (cricNumpadLocked) return;
   cricSetNumpadDisabled(true);
-  cricPlayerHistory.push(playerNum);
 
+  // FIX CRIC-1: history was pushed BEFORE cricBotPick() was called, so the bot
+  // could read the player's current-ball pick via:
+  //   last = cricPlayerHistory[cricPlayerHistory.length - 1]
+  // In medium mode when bowling it returned `last` directly — the player's own
+  // number — giving a near-guaranteed out every ball (55 % of the time).
+  // Fix: let the bot pick first based on PAST history only, then record the
+  // current pick so it informs future balls.
   var botNum = cricBotPick();
+  cricPlayerHistory.push(playerNum); // record AFTER bot has committed its pick
   cricPlayPNum.textContent = playerNum;
   cricPlayBNum.textContent = '...';
   cricNumPop(cricPlayPNum);

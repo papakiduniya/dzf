@@ -163,11 +163,8 @@ var ck = (function () {
       }
     });
 
-    if (!found && capturedSoFar.length === 0) return [];
-    if (!found) {
-      // No further captures — return self as terminal (shouldn't reach here in top call)
-      return [];
-    }
+    // If no captures found at all (top-level call with no jumps, or continuation exhausted), return empty.
+    if (!found) return [];
     return chains;
   }
 
@@ -435,20 +432,8 @@ var ck = (function () {
       if (typeof SoundManager !== 'undefined' && SoundManager.click) SoundManager.click();
     }
 
-    // Check for multi-jump (capture with further captures available from same piece)
-    if (move.captures.length > 0) {
-      var furtherCaptures = ckGetAllMoves(state.board, state.currentTurn).captures.filter(function(m) {
-        return m.from[0] === tr && m.from[1] === tc;
-      });
-      // But only if piece wasn't just promoted (kings can continue, normals too in standard rules)
-      if (furtherCaptures.length > 0) {
-        state.multiJumpPiece = [tr, tc];
-        state.selected = [tr, tc];
-        state.validMoves = furtherCaptures;
-        ckRender();
-        return;
-      }
-    }
+    // The full capture chain is already encoded in move.captures / move.finalBoard
+    // from ckGetCaptureChains — no mid-move continuation check needed.
 
     // End of move / turn
     state.multiJumpPiece = null;
@@ -676,6 +661,14 @@ var ck = (function () {
   function ckApplyMoveToBoard(board, move) {
     var fr = move.from[0], fc = move.from[1];
     var tr = move.to[0],   tc = move.to[1];
+    // Use pre-computed finalBoard when available — it correctly handles mid-chain promotions
+    if (move.finalBoard) {
+      var fb = move.finalBoard;
+      for (var r = 0; r < SIZE; r++)
+        for (var c = 0; c < SIZE; c++)
+          board[r][c] = fb[r][c];
+      return;
+    }
     var piece = board[fr][fc];
     board[fr][fc] = EMPTY;
     board[tr][tc] = piece;
@@ -1054,7 +1047,7 @@ var ck = (function () {
 // ─────────────────────────────────────────────────────────────
 // ENTRY POINT — called by showCheckers() in script.js
 // ─────────────────────────────────────────────────────────────
-function ckInit() {
+function ckStart() {
   ck.ensureWired && ck.ensureWired();
   ck.init();
 }
