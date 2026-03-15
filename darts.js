@@ -129,7 +129,11 @@
   function dartsResizeCanvas() {
     var wrap = $('darts-canvas-wrap');
     if (!wrap || !DS.canvas) return;
-    var w = Math.min(wrap.clientWidth || 400, 460);
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var isLandscape = vw > vh;
+    var maxByW = Math.min(wrap.clientWidth || 400, 460);
+    var maxByH = isLandscape ? vh - 60 : 9999;
+    var w = Math.min(maxByW, maxByH);
     DS.canvas.width = w; DS.canvas.height = w;
     DS.cx = w/2; DS.cy = w/2; DS.boardR = w * 0.47;
     if (DS.ctx) dartsDraw();

@@ -77,13 +77,12 @@
   /* ── Resize ─────────────────────────────────────────────────── */
   function resize() {
     var vw=window.innerWidth, vh=window.innerHeight;
-    var isLandscape = vw > vh && vh < 520;
+    var isLandscape = vw > vh;
     var avW, avH;
     if (isLandscape) {
-      // Landscape phone: height drives the canvas size
-      // Reserve ~80px for header + score row
+      // Landscape: height drives canvas, keep 16:9 width
       avH = vh - 80;
-      avW = Math.min(vw - 16, Math.round(avH / 0.5625)); // keep 16:9
+      avW = Math.min(vw - 16, Math.round(avH / 0.5625));
     } else {
       avW = Math.min(vw - 24, 740);
       var asp = vw < 480 ? 0.80 : vw < 680 ? 0.68 : 0.5625;
@@ -101,8 +100,8 @@
   function wireResize() {
     if (_resizeWired) return; _resizeWired=true;
     window.addEventListener('resize', function(){
-      if (gameState==='playing'||gameState==='serving') return;
-      resize(); drawIdle();
+      resize();
+      if (gameState==='idle') drawIdle();
     });
   }
 

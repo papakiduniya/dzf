@@ -12,20 +12,19 @@
 
   function calcCell() {
     var vw = window.innerWidth, vh = window.innerHeight;
-    var isLandscape = vw > vh && vh < 520;
+    var isLandscape = vw > vh; // any landscape, not just vh<520
     var cellByW, cellByH;
     if (isLandscape) {
       // Two boards side by side — each board is COLS wide
-      // Reserve 8px gutters: (vw - 32) / (COLS * 2 + gap_cols)
-      cellByW = Math.floor((vw - 40) / (COLS * 2 + 2));
-      // Height: full vh minus HUD(44px) + topbar
-      cellByH = Math.floor((vh - 56) / ROWS);
+      // Reserve gutters + HUD bar (~56px top)
+      cellByW = Math.floor((vw - 48) / (COLS * 2 + 3));
+      cellByH = Math.floor((vh - 60) / ROWS);
     } else {
-      // Portrait: boards stack side by side, fit in half screen width
+      // Portrait: boards side by side, fit in screen width
       cellByW = Math.floor((vw - 32) / (COLS * 2 + 2));
-      cellByH = Math.floor((vh * 0.7) / ROWS);
+      cellByH = Math.floor((vh * 0.65) / ROWS);
     }
-    CELL = Math.max(16, Math.min(28, cellByW, cellByH));
+    CELL = Math.max(14, Math.min(28, cellByW, cellByH));
   }
 
   var PIECES = [
@@ -46,8 +45,10 @@
     ],
     botTimer: null,
     _wired: false,
+    _resizeHandler: null,
   };
 
+  window.tetrisStop = function () { tbStop(); };
   window.tetrisInit = function () {
     if (!TB._wired) { tbWireUI(); TB._wired = true; }
     tbShowHome();
@@ -124,6 +125,13 @@
       if (p.interval) { clearInterval(p.interval); p.interval = null; }
     });
     if (TB.botTimer) { clearTimeout(TB.botTimer); TB.botTimer = null; }
+    if (TB._resizeHandler) {
+      window.removeEventListener('resize', TB._resizeHandler);
+      TB._resizeHandler = null;
+    }
+    // Remove landscape class when stopping
+    var playEl = document.getElementById('tetris-play');
+    if (playEl) playEl.classList.remove('tetris-landscape');
   }
 
   // ── Board helpers ─────────────────────────────────────────────
@@ -311,6 +319,38 @@
 
     // Mobile swipe support
     tbAddSwipeControls();
+
+    // ── Resize / orientationchange: recalc cell size & redraw ──
+    function tbOnResize() {
+      if (TB.over) return;
+      calcCell();
+      TB.players.forEach(function (p, i) {
+        if (p.canvas) {
+          p.canvas.width  = COLS * CELL;
+          p.canvas.height = ROWS * CELL;
+          p.ctx = p.canvas.getContext('2d');
+        }
+        if (p.nextCanvas) {
+          p.nextCanvas.width  = 4 * CELL;
+          p.nextCanvas.height = 4 * CELL;
+          p.nextCtx = p.nextCanvas.getContext('2d');
+        }
+        tbDraw(i);
+        tbDrawNext(i);
+      });
+      // Update play panel layout class for CSS
+      var playEl = el('tetris-play');
+      if (playEl) {
+        var isLandscape = window.innerWidth > window.innerHeight;
+        playEl.classList.toggle('tetris-landscape', isLandscape);
+      }
+    }
+    // Remove any old listener before adding new one
+    if (TB._resizeHandler) window.removeEventListener('resize', TB._resizeHandler);
+    TB._resizeHandler = tbOnResize;
+    window.addEventListener('resize', tbOnResize);
+    // Apply layout class immediately
+    tbOnResize();
   }
 
   function tbAddSwipeControls() {

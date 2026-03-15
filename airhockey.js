@@ -152,10 +152,20 @@ function ahStopLoop() {
 function ahResize() {
   var field = document.getElementById('ah-canvas-field');
   if (!field || !ahCanvas) return;
+  var vw = window.innerWidth, vh = window.innerHeight;
+  var isLandscape = vw > vh;
   var fw = field.clientWidth  || 360;
-  var fh = field.clientHeight || Math.round(fw * 1.55);
-  var newW = Math.min(fw, 420);
-  var newH = Math.max(Math.round(newW * 1.5), Math.min(fh, 660));
+  var fh = field.clientHeight || (isLandscape ? vh - 90 : Math.round(fw * 1.55));
+  var newW, newH;
+  if (isLandscape) {
+    // Landscape: fill the available height, use portrait-like aspect inside
+    newH = Math.min(fh, vh - 90);
+    newW = Math.min(fw, Math.round(newH / 1.5), 420);
+    newH = Math.round(newW * 1.5);
+  } else {
+    newW = Math.min(fw, 420);
+    newH = Math.max(Math.round(newW * 1.5), Math.min(fh, 660));
+  }
   if (ahRunning && ahW && ahH && (newW !== ahW || newH !== ahH)) {
     var sx = newW / ahW, sy = newH / ahH;
     ahPuck.x *= sx; ahPuck.y *= sy;

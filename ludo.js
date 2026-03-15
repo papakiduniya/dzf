@@ -640,11 +640,12 @@
    *   total:  312px
    */
   function setLudoBoardSize() {
-    const vh = window.innerHeight || document.documentElement.clientHeight;
-    const reserved = 312;
-    const boardMax = Math.max(200, vh - reserved);
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const isLandscape = vw > vh;
+    const reserved = isLandscape ? 120 : 312; // much less reserved in landscape
+    const boardMax = Math.max(160, vh - reserved);
     const app = $id('ludo-app');
-    const containerW = app ? (app.clientWidth || window.innerWidth) - 20 : window.innerWidth - 20;
+    const containerW = app ? (app.clientWidth || vw) - 20 : vw - 20;
     const size = Math.min(boardMax, containerW);
     document.documentElement.style.setProperty('--ludo-board-size', size + 'px');
   }

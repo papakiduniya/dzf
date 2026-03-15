@@ -3555,7 +3555,7 @@
       </div>
 
       <!-- Heading -->
-      <div style="text-align:center;margin-bottom:10px;padding-top:54px;">
+      <div id="tetris-heading" style="text-align:center;margin-bottom:6px;padding-top:54px;flex-shrink:0;">
         <h1 style="margin:0;font-family:'Orbitron',sans-serif;font-size:1.15rem;font-weight:900;letter-spacing:0.13em;background:linear-gradient(90deg,#00e5ff,#0088ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:inline-block;">🧱 TETRIS DUEL</h1>
       </div>
 
@@ -4769,52 +4769,31 @@ if (document.readyState === 'loading') {
       var isLandscape = window.innerWidth > window.innerHeight;
 
       if (isLandscape) {
-        /* ── Hide ALL game screens (document-flow, not hub) ── */
-        document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
-          if (s.id !== 'screen-hub') s.style.display = 'none';
-        });
-
-        /* ── Hide ALL fixed panels — adds .hidden so CSS can't override ── */
-        hideAllFixedPanels();
-
-        /* ── Stop all game loops ── */
-        window.DZ_PAUSED = true;
-        if (typeof window.dzPauseAllGames === 'function') {
-          try { window.dzPauseAllGames(); } catch(e) {}
-        } else {
-          ['tetrisStop','tetrisDestroy','rdStop','reactionStop',
-           'reactionDestroy','carromStop','sudokuStop','ppStopGame',
-           'sdStopGame','bombermanDestroy','territoryDestroy'
-          ].forEach(function(fn) {
-            try { if (typeof window[fn] === 'function') window[fn](); } catch(e) {}
-          });
+        /* ── Hide only fixed panels that aren't actively playing ──
+           Active games (screen not .hidden) continue running in landscape.
+           Only stop loops if on the hub (no active game). */
+        var activeScreen = document.querySelector('[id^="screen-"]:not(.hidden):not(#screen-hub)');
+        if (!activeScreen) {
+          /* On hub in landscape — stop any lingering game loops */
+          window.DZ_PAUSED = true;
+          if (typeof window.dzPauseAllGames === 'function') {
+            try { window.dzPauseAllGames(); } catch(e) {}
+          } else {
+            ['tetrisStop','tetrisDestroy','rdStop','reactionStop',
+             'reactionDestroy','carromStop','sudokuStop','ppStopGame',
+             'sdStopGame','bombermanDestroy','territoryDestroy'
+            ].forEach(function(fn) {
+              try { if (typeof window[fn] === 'function') window[fn](); } catch(e) {}
+            });
+          }
+          /* Hide all fixed panels when on hub */
+          hideAllFixedPanels();
         }
+        /* Trigger resize on active game canvases so they adapt to landscape */
+        setTimeout(function() { window.dispatchEvent(new Event('resize')); }, 100);
 
       } else {
-        /* ── Portrait: restore game screen visibility (let .hidden class control) ── */
-        document.querySelectorAll('[id^="screen-"]').forEach(function(s) {
-          if (s.id !== 'screen-hub') s.style.display = '';
-        });
-
-        /* ── Fixed panels: clear inline styles only — .hidden class stays intact.
-           If tetris-play, rd-play etc. have .hidden they remain hidden.
-           They will only show when the game actively removes .hidden itself. ── */
-        FIXED_PANELS.forEach(function(id) {
-          var el = document.getElementById(id);
-          if (el) {
-            el.style.display       = '';
-            el.style.visibility    = '';
-            el.style.pointerEvents = '';
-            /* DO NOT remove .hidden — that is what was causing Tetris to appear */
-          }
-        });
-        document.querySelectorAll('[data-dz-game-panel]').forEach(function(p) {
-          p.style.display       = '';
-          p.style.visibility    = '';
-          p.style.pointerEvents = '';
-          /* DO NOT remove .hidden */
-        });
-
+        /* Portrait: clear DZ_PAUSED flag */
         window.DZ_PAUSED = false;
       }
     }
