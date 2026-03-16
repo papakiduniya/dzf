@@ -158,7 +158,7 @@
 
     // Auto-expire after 3 seconds
     RD.waitTimer = setTimeout(function () {
-      if (RD.phase === 'signal') rdRoundResult(-1, -1, 3000);
+      if (RD.phase === 'signal') rdRoundResult(-1, 3000);
     }, 3000);
   }
 
@@ -190,7 +190,7 @@
       var rt = Math.round(performance.now() - RD.signalTime);
       if (RD.waitTimer) { clearTimeout(RD.waitTimer); RD.waitTimer = null; }
       if (RD.botTimer) { clearTimeout(RD.botTimer); RD.botTimer = null; }
-      rdRoundResult(pid, 1 - pid, rt);
+      rdRoundResult(pid, rt);
     }
   }
 
@@ -198,13 +198,12 @@
     if (RD.phase === 'signal') {
       var rt = Math.round(performance.now() - RD.signalTime);
       if (RD.waitTimer) { clearTimeout(RD.waitTimer); RD.waitTimer = null; }
-      rdRoundResult(1, 0, rt);
+      rdRoundResult(1, rt);
     }
   }
 
-  // FIX BUG-4: removed unused 'loser' parameter. It was passed at every call site
-  // (as '1-pid' or '-1') but never read inside the function — a dead parameter that
-  // implies it does something. Call sites are unchanged; JS silently ignores extras.
+  // rdRoundResult(winner, reactionMs)
+  // winner: 0=P1, 1=P2/Bot, -1=nobody tapped (timeout). reactionMs: time from signal to tap.
   function rdRoundResult(winner, reactionMs) {
     RD.phase = 'result';
     rdSetSignal('result');

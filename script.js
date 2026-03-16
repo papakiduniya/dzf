@@ -98,7 +98,7 @@ var screenLudo     = document.getElementById('screen-ludo');
 var screenSudoku   = document.getElementById('screen-sudoku');
 var screenCarrom   = document.getElementById('screen-carrom');
 
-var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom];
+var ALL_SCREENS = [screenHub, screenTTT, screenRPS, screenTap, screen2048, screenC4, screenCricket, screenAH, screenPB, screenChess, screenBattleship, screenCheckers, screenDarts, screenTanks, screenStarCatcher, screenSpaceDodge, screenPingPong, screenMinesweeper, screenTetris, screenBomberman, screenReaction, screenTerritory, screenLudo, screenSudoku, screenCarrom, screenDrawGuess];
 // Note: screenMFD and screenCDD are push()ed to ALL_SCREENS
 // later in their respective sections once their vars are declared.
 

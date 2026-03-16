@@ -1257,6 +1257,17 @@
   }
 
   /* ═══════════════════════════════════════════════════════
+     PUBLIC STOP — called by dzPauseAllGames / dzStopAllGames
+     Cancels the RAF loop and stops background music so no
+     audio or animation leaks when navigating back to hub.
+  ═══════════════════════════════════════════════════════ */
+  window.ludomStop = function () {
+    stopMusic();
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
+    phase = 'idle';
+  };
+
+  /* ═══════════════════════════════════════════════════════
      INIT SETUP PREVIEW  (called once at script load)
   ═══════════════════════════════════════════════════════ */
   (function initSetup() {
