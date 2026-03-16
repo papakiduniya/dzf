@@ -271,9 +271,37 @@
     if (DS.inputLocked && !( DS.vsBot && DS.currentPlayer===1 )) return;
     DS.inputLocked = true;
     var hit = dartsScoreHit(tx, ty);
-    var fromX = DS.cx + (tx - DS.cx)*3.5, fromY = DS.cy + (ty - DS.cy)*3.5;
-    DS.animFrom = {x:fromX, y:fromY}; DS.animTo = {x:tx, y:ty}; DS.animProgress = 0;
+    // Project the start point 3.5× beyond the target from center, then clamp it
+    // to just outside the canvas edge.  Without the clamp, throws aimed at the
+    // board edges begin ~2× boardR off-screen, making the dart invisible for the
+    // first 2-3 frames and causing the "dart goes missing" effect users reported.
+    var rawFromX = DS.cx + (tx - DS.cx)*3.5, rawFromY = DS.cy + (ty - DS.cy)*3.5;
+    var fromPos  = dartsClampAnimStart(tx, ty, rawFromX, rawFromY);
+    DS.animFrom = fromPos; DS.animTo = {x:tx, y:ty}; DS.animProgress = 0;
     dartsFlyAnimate(hit);
+  }
+
+  // Walks the line from (tx,ty) toward (rawFromX,rawFromY) and returns the point
+  // where it first crosses the canvas boundary (plus a tiny overshoot so the dart
+  // appears to enter from just outside the edge).  If the raw start is already
+  // inside the canvas it is returned unchanged.
+  function dartsClampAnimStart(tx, ty, rawFromX, rawFromY) {
+    var W = DS.canvas.width;
+    var dx = rawFromX - tx, dy = rawFromY - ty;
+    // Already inside — no clamping needed
+    if (rawFromX >= 0 && rawFromX <= W && rawFromY >= 0 && rawFromY <= W) {
+      return {x: rawFromX, y: rawFromY};
+    }
+    // Find the t in [0,1] where the point (tx+t*dx, ty+t*dy) exits the canvas.
+    // t=0 is the target (on-board), t=1 is rawFrom (potentially off-canvas).
+    var tExit = 1.0;
+    if (dx > 0) tExit = Math.min(tExit, (W - tx) / dx);
+    else if (dx < 0) tExit = Math.min(tExit, (0 - tx) / dx);
+    if (dy > 0) tExit = Math.min(tExit, (W - ty) / dy);
+    else if (dy < 0) tExit = Math.min(tExit, (0 - ty) / dy);
+    // Step a tiny bit beyond the exit so the dart starts just outside the visible area
+    var t = Math.min(tExit + 0.02, 1.0);
+    return {x: tx + t*dx, y: ty + t*dy};
   }
 
   function dartsFlyAnimate(hit) {
