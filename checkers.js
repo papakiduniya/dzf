@@ -1047,7 +1047,7 @@ var ck = (function () {
 // ─────────────────────────────────────────────────────────────
 // ENTRY POINT — called by showCheckers() in script.js
 // ─────────────────────────────────────────────────────────────
-function ckStart() {
+function ckInit() {
   ck.ensureWired && ck.ensureWired();
   ck.init();
 }
